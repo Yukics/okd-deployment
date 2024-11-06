@@ -1,0 +1,53 @@
+# - name: Upload iso to proxmox using proxmoxer
+#   ansible.builtin.shell: |
+#     cat <<EOF >> proxmox_fcos_iso.py
+#     from proxmoxer import ProxmoxAPI
+    
+#     proxmox = ProxmoxAPI('{{ proxmox_api_host }}', 
+#       user='{{ proxmox_api_user }}', 
+#       password='{{ hostvars['localhost']['proxmox_api_password'] }}', 
+#       verify_ssl=False
+#     )
+
+#     proxmox.nodes(
+#       '{{ bootstrap[0].node }}'
+#     ).storage(
+#       '{{ iso_storage }}'
+#     )('download-url').post(
+#       url='{{ hostvars[bootstrap[0].name+"."+domain]['fcos_iso'] }}', 
+#       content='iso', 
+#       filename='{{ hostvars[bootstrap[0].name+"."+domain]['fcos_iso'].split('/')[-1] }}'
+#     )
+#     EOF
+#     /usr/bin/python3 proxmox_fcos_iso.py
+#     rm -f proxmox_fcos_iso.py
+
+# - name: Create template fcos vm, without disk
+#   community.general.proxmox_kvm:
+#     proxmox_default_behavior: no_defaults
+#     api_user: "{{ proxmox_api_user }}"
+#     api_password: "{{ proxmox_api_password }}"
+#     api_host: "{{ proxmox_api_host }}"
+#     vmid: "{{ item.id }}"
+#     name: "okd-fcos-template"
+#     node: "{{ item.node }}"
+#     scsihw: virtio-scsi-pci
+#     cores: 4
+#     memory: 16384
+#     state: present
+#     tags:
+#       - okd
+#       - template
+#     bios: ovmf
+#     boot: 'order=virtio0;scsi0;ide2'
+#     machine: q35
+#     cpu: "host"
+#     ostype: "l26"
+#     efidisk0:
+#       storage: "{{ disk_storage }}"
+#       format: raw
+#       efitype: 4m
+#       pre_enrolled_keys: 1
+#     net:
+#       net0: 'virtio,bridge=vmbr0'
+#   loop: "{{ okd_template_nodes }}"

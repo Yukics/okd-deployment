@@ -1,0 +1,130 @@
+---
+#? DNS
+# - name: Setup DNS registers opnsense
+#   hosts: localhost
+#   connection: local
+#   gather_facts: no
+#   module_defaults:
+#     group/ansibleguy.opnsense.all:
+#       firewall: '{{ opnsense_host }}'
+#       api_key: '{{ opnsense_key }}'
+#       api_secret: '{{ opnsense_secret }}'
+#       ssl_verify: false
+#     ansibleguy.opnsense.list:
+#       target: 'unbound_host'
+#   vars_files:
+#     - conf/opnsense.yaml
+#     - conf/infra.yaml
+#   tasks:
+#     - include_tasks: tasks/0_opnsense_dns.yaml
+
+#? LOADBALANCERS VM
+- name: Loadbalancers VM creation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - conf/proxmox.yaml
+    - conf/opnsense.yaml
+    - conf/infra.yaml
+  tasks:
+    - name: Create infrastructure
+      include_tasks: tasks/1_loadbalancers_create.yaml
+
+- name: Configure keepalived
+  hosts: loadbalancers_hosts
+  become: true
+  vars_files:
+    - conf/infra.yaml
+  tasks:
+    - include_tasks: tasks/2_loadbalancers_keepalived.yaml
+
+- name: Configure haproxies
+  hosts: loadbalancers_hosts
+  become: true # cloud init default user will be in sudoers
+  vars_files:
+    - conf/infra.yaml
+  tasks:
+    - include_tasks: tasks/3_loadbalancers_haproxy.yaml
+
+- name: Download and install oc on loadbalancer VM
+  hosts: loadbalancers_hosts
+  become: true # cloud init default user will be in sudoers
+  vars_files:
+    - conf/infra.yaml
+    - conf/redhat.yaml
+  roles:
+  - kwoodson.yedit
+  tasks:
+    - include_tasks: tasks/4_loadbalancers_cli.yaml
+
+- name: Configure iPXE
+  hosts: loadbalancers_hosts
+  become: true
+  vars_files:
+    - conf/infra.yaml
+  tasks:
+    - include_tasks: tasks/4_loadbalancers_ipxe.yaml
+
+- name: Configuration files preparation
+  hosts: loadbalancers_hosts
+  become: true # cloud init default user will be in sudoers
+  vars_files:
+    - conf/infra.yaml
+    - conf/redhat.yaml
+  roles:
+  - kwoodson.yedit
+  tasks:
+    - include_tasks: tasks/5_okd_conf.yaml
+
+#? PROXMOX TEMPLATE
+# - name: Download iso and upload to proxmox
+#   hosts: localhost
+#   connection: local
+#   vars_files:
+#     - conf/infra.yaml
+#     - conf/proxmox.yaml
+#   tasks:
+#     - include_tasks: tasks/6_proxmox_fcos_iso.yaml
+
+# - name: Fedora Core OS template
+#   hosts: proxmox
+#   gather_facts: false
+#   vars_files:
+#     - conf/infra.yaml
+#     - conf/proxmox.yaml
+#   tasks:
+#     - include_tasks: tasks/7_proxmox_create_fcos_template.yaml
+
+#? BOOTSTRAP CREATION
+- name: Bootstrap VM creation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - conf/proxmox.yaml
+    - conf/infra.yaml
+  tasks:
+    - include_tasks: tasks/8_proxmox_create_bootstrap.yaml
+
+# #? CONTROLPLANE CREATION
+# - name: Controlplane VM creation
+#   hosts: localhost
+#   connection: local
+#   gather_facts: false
+#   vars_files:
+#     - conf/proxmox.yaml
+#     - conf/opnsense.yaml
+#     - conf/infra.yaml
+#   tasks:
+#     - include_tasks: tasks/9_proxmox_create_controlplanes.yaml
+
+# - name: Configure controlplanes
+#   hosts: controlplane_hosts
+#   become: true
+#   vars_files:
+#     - conf/infra.yaml
+#   roles:
+#   - kwoodson.yedit
+#   tasks:
+#     - include_tasks: tasks/controlplane_setup.yaml

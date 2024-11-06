@@ -1,0 +1,52 @@
+variant: fcos
+version: 1.5.0
+ignition:
+  config:
+    merge:
+      - source: http://{{ loadbalancer }}:8000/{{ type }}.ign
+kernel_arguments:
+  should_exist:
+    - ip={{ item.ip }}::{{ gateway }}:255.255.255.0:{{ item.name }}.{{ domain }}:ens18:none
+    - nameserver={{ dns | join(":") }}
+storage:
+  files:
+    - path: /etc/zincati/config.d/55-updates-strategy.toml
+      contents:
+        inline: |
+          [updates]
+          strategy = "periodic"
+          [[updates.periodic.window]]
+          days = [ "Sat", "Sun" ]
+          start_time = "22:30"
+          length_minutes = 60
+#    - path: /etc/vconsole.conf
+#      mode: 0644
+#      contents:
+#        inline: KEYMAP=es
+    - path: /etc/hostname
+      mode: 0644
+      contents:
+        inline: |
+          {{ item.name }}
+    - path: /etc/NetworkManager/system-connections/ens18.nmconnection
+      mode: 0600
+      contents:
+        inline: |
+          [connection]
+          id=ens18
+          type=ethernet
+          interface-name=ens18
+          [ipv4]
+          address1={{ item.ip }}/24,{{ gateway }}
+          dhcp-hostname={{ item.name }}
+          dns={{ dns | join(";") }};
+          dns-search={{ searchdomain }}
+          may-fail=false
+          method=manual
+passwd:
+  users:
+    - name: core
+      ssh_authorized_keys:
+        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIItNs6VIKT7ggUjhfnVedzON41XHI/pUn6A/gS5YHAuM yuki@yukiV2
+        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE+FFDoXjiC4vdqb6GQcQQckEdWJljsE8V/tHIF8DR4i yuki@yukiV2
+#        - {{ hostvars[loadbalancers[0].name+"."+domain]['ssh_public_key']['content'] | b64decode}}

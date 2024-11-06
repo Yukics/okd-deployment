@@ -1,0 +1,28 @@
+- name: Generate dns yaml conf
+  ansible.builtin.template:
+    src: conf/dns.yaml.j2
+    dest: conf/dns.yaml
+
+- name: Include vars of dns.yaml into the 'registers'
+  ansible.builtin.include_vars:
+    file: conf/dns.yaml
+    name: list
+
+- name: "Create registers *.{{ cluster_name }}.{{ searchdomain }} on unbound DNS"
+  ansibleguy.opnsense.unbound_host:
+    hostname: '{{ item.hostname }}'
+    domain: '{{ cluster_name }}.{{ searchdomain }}'
+    value: '{{ item.ip }}'
+    match_fields: ['hostname']
+    reload: false
+  loop: '{{ list.registers }}'
+
+- name: "Create *.apps.{{ cluster_name }}.{{ searchdomain }} on unbound DNS"
+  ansibleguy.opnsense.unbound_domain:
+    domain: 'apps.{{ cluster_name }}.{{ searchdomain }}'
+    server: '{{ loadbalancer }}'
+    reload: false
+
+- name: Reloading unbound DNS
+  ansibleguy.opnsense.reload:
+    target: 'unbound'

@@ -1,0 +1,80 @@
+# enable logs if required
+log-queries
+log-dhcp
+
+# ----- DHCP CONFIG -----
+interface=eth0
+# dhcp-range=<start address>,<end address>,12h
+# dhcp-authoritative
+# dhcp-option=1,<subnet mask>
+# dhcp-option=3,<default gateway>
+# dhcp-option=6,<DNS server IP>,1.1.1.1
+# If there is already a DHCP server, ignore the above DHCP config and use this syntax instead:
+# dhcp-range=<subnet ID>,proxy
+dhcp-range=192.168.69.0,proxy
+
+# DHCP Reservation
+# dhcp-host=<MAC Address>,<Reserved IP>
+
+# ----- TFTP CONFIG -----
+enable-tftp
+tftp-root=/tftpboot
+
+# ----- PXE CONFIG -----
+pxe-service=x86PC,"PXELINUX (BIOS)",bios/pxelinux # BIOS; note that the file name is NOT a typo
+# UEFI
+#dhcp-match=set:efi-x86_64,option:client-arch,7
+dhcp-boot=tag:efi-x86_64,efi64/syslinux.efi
+dhcp-match=set:ipxe,175
+
+# disable DNS server
+port=0
+
+# listen on PXEBOOT
+#listen-address={{ ansible_default_ipv4.address }}
+#interface=eth0
+# enable built-in tftp server
+#enable-tftp
+#tftp-root=/tftpboot
+# DHCP range
+#dhcp-range=192.168.69.0,proxy
+# Tag dhcp request from iPXE
+#dhcp-vendorclass=set:bios,PXEClient:Arch:00000
+#dhcp-vendorclass=set:efi32,PXEClient:Arch:00002
+#dhcp-vendorclass=set:efi32,PXEClient:Arch:00006
+#dhcp-vendorclass=set:efi64,PXEClient:Arch:00007
+#dhcp-vendorclass=set:efi64,PXEClient:Arch:00008
+#dhcp-vendorclass=set:efi64,PXEClient:Arch:00009
+#tag-if=set:loadbios,tag:!ipxe,tag:bios
+#tag-if=set:loadefi32,tag:!ipxe,tag:efi32
+#tag-if=set:loadefi64,tag:!ipxe,tag:efi64
+#pxe-service=tag:loadbios,x86PC,"iPXE Network boot (BIOS)",undionly.kpxe
+#pxe-service=tag:loadefi32,IA32_EFI,"iPXE Network boot (EFI32)",ipxe32.efi
+#pxe-service=tag:loadefi32,BC_EFI,"iPXE Network boot (EFI32)",ipxe32.efi
+#pxe-service=tag:loadefi64,X86-64_EFI,"iPXE Network boot (EFI)",ipxe.efi
+#pxe-service=tag:loadefi64,IA64_EFI,"iPXE Network boot (EFI)",ipxe.efi
+#dhcp-boot=tag:ipxe,menu/boot.ipxe
+#dhcp-boot=tag:loadbios,undionly.kpxe.0,172.16.254.10,172.16.0.0
+#dhcp-boot=tag:ipxe,shell.ipxe,raspi,172.16.254.10
+#dhcp-boot=tag:ipxe,menu.ipxe,raspi,172.16.254.10
+#dhcp-boot=tag:ipxe,http://boot.ipxe.org/demo/boot.php
+#dhcp-option=tag:ipxe,67,http://diskstation/ipxe/boot.ipxe
+# Default gateway
+#dhcp-option=3,{{ gateway }}
+# Domain name - homelab.net
+#dhcp-option=15,{{ searchdomain }}
+# Broacast address
+#dhcp-option=28,192.168.69.255
+# Set interface MTU to 9000 bytes (jumbo frame)
+# Enable only when your network supports it
+# dhcp-option=26,9000
+# inspect the vendor class string and tag BIOS client
+#dhcp-vendorclass=BIOS,PXEClient:Arch:00000
+# 1st boot file - Legacy BIOS client
+#dhcp-boot=tag:!ipxe,tag:BIOS,undionly.kpxe
+# 1st boot file - EFI client
+# at the moment all non-BIOS clients are considered
+# EFI client
+#dhcp-boot=tag:!ipxe,tag:!BIOS,ipxe-x86_64.efi
+# 2nd boot file
+#dhcp-boot=tag:ipxe,menu/boot.ipxe

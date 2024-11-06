@@ -1,0 +1,40 @@
+- name: Install packages
+  ansible.builtin.yum:
+    name: keepalived
+    state: latest
+
+- name: Allow vrrp firewall
+  ansible.posix.firewalld:
+    rich_rule: rule protocol value="vrrp" accept
+    zone: public
+    immediate: true
+    permanent: true
+    state: enabled
+
+- name: Set ip_nonlocal_bind on sysctl
+  ansible.posix.sysctl:
+    name: net.ipv4.ip_nonlocal_bind
+    value: '1'
+    sysctl_set: true
+    state: present
+    reload: true
+
+- name: Change the keepalived_t domain to permissive
+  community.general.selinux_permissive:
+    name: keepalived_t
+    permissive: true
+
+- name: Generate keepalived conf
+  ansible.builtin.template:
+    src: conf/keepalived.conf.j2
+    dest: /etc/keepalived/keepalived.conf
+    owner: root
+    mode: '0660'
+    validate: /usr/sbin/keepalived -t -f %s
+    backup: yes
+
+- name: Restart service keepalived
+  ansible.builtin.service:
+    name: keepalived
+    state: restarted
+    enabled: yes

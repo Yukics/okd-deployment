@@ -1,0 +1,2 @@
+#https://console.redhat.com/openshift/install/pull-secret
+redhat_pull_secret: '<json>'

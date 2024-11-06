@@ -1,0 +1,8 @@
+- name: Install requirements
+  hosts: localhost
+  connection: local
+  tasks:
+    - name: Install packages
+      ansible.builtin.shell: |
+        pip install proxmoxer httpx requests_toolbelt
+        ansible-galaxy collection install ansibleguy.opnsense kwoodson.yeditc

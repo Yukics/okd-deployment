@@ -1,0 +1,20 @@
+#!ipxe
+
+:start
+menu PXE Boot Options
+item shell iPXE shell
+item fedora-core-os-bootstrap-net Fedora Core OS 39 installation
+item exit  Exit to BIOS
+
+choose --default fedora-core-os-bootstrap-net --timeout 10000 option && goto ${option}
+
+:shell
+shell
+
+:fedora-core-os-bootstrap-net
+kernel http://{{ loadbalancer }}:8000/media/fedora-coreos/fedora-coreos-{{ fcos_version.stdout }}-live-kernel-x86_64 initrd=main coreos.live.rootfs_url=http://{{ loadbalancer }}:8000/media/fedora-coreos/fedora-coreos-{{ fcos_version.stdout }}-live-rootfs.x86_64.img coreos.inst.install_dev=/dev/sda coreos.inst.ignition_url=http://{{ loadbalancer }}:8000/bootstrap_{{ bootstrap[0].name }}.ign  
+initrd --name main http://{{ loadbalancer }}:8000/media/fedora-coreos/fedora-coreos-{{ fcos_version.stdout }}-live-initramfs.x86_64.img 
+boot
+
+:exit
+exit

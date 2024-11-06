@@ -1,0 +1,5 @@
+nmcli --offline connection add type ethernet con-name "Wired Connection 1" \
+ipv4.addresses 192.168.69.200/24 \
+ipv4.dns 192.168.69.1 \
+ipv4.dns-search "yuki.es" \
+ipv4.method manual > /etc/NetworkManager/system-connections/example.nmconnection

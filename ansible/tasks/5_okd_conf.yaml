@@ -1,0 +1,109 @@
+- name: Generate install-config.yaml
+  ansible.builtin.template:
+    src: conf/install-config.yaml.j2
+    dest: /root/installation/install-config.yaml
+    owner: root
+    mode: '0660'
+    backup: yes
+  when: 'loadbalancers[0].name in inventory_hostname'
+
+- name: Create ignition and manifest from previous config
+  ansible.builtin.shell: |
+    /root/openshift-install create manifests --dir /root/installation
+  when: 'loadbalancers[0].name in inventory_hostname'
+
+- name: Set mastersSchedulable to false
+  yedit:
+    src: /root/installation/manifests/cluster-scheduler-02-config.yml
+    key: spec.mastersSchedulable
+    value: false
+  when: 'loadbalancers[0].name in inventory_hostname'
+
+- name: Create ignition and manifest from previous config
+  ansible.builtin.shell: |
+    /root/openshift-install create ignition-configs --dir /root/installation
+  when: 'loadbalancers[0].name in inventory_hostname'
+
+- name: Get bootstrap.ign sha512
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+   sha512sum /root/installation/bootstrap.ign | awk '{print $1}'
+  register: bootstrap_sha512
+
+- name: Set bootstrap_sha512
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.set_fact:
+    bootstrap_sha512: "{{ bootstrap_sha512.stdout }}"
+
+- name: Generate butane conf for bootstrap
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.template:
+    src: conf/butane.yaml.j2
+    dest: /root/installation/butane_{{ item.name }}.yaml
+    owner: root
+    mode: '0660'
+  loop: "{{ bootstrap }}"
+  vars:
+    type: bootstrap
+
+- name: Generate butane conf for controlplane
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.template:
+    src: conf/butane.yaml.j2
+    dest: /root/installation/butane_{{ item.name }}.yaml
+    owner: root
+    mode: '0660'
+  loop: "{{ controlplane }}"
+  vars:
+    type: master
+
+- name: Generate butane conf for worker
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.template:
+    src: conf/butane.yaml.j2
+    dest: /root/installation/butane_{{ item.name }}.yaml
+    owner: root
+    mode: '0660'
+  loop: "{{ compute }}"
+  vars:
+    type: worker
+
+- name: Generate ignition files for bootstrap
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    butane /root/installation/butane_{{ item.name }}.yaml > /root/installation/bootstrap_{{ item.name }}.ign
+  loop: "{{ bootstrap }}"
+
+- name: Generate ignition files for controlplanes
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    butane /root/installation/butane_{{ item.name }}.yaml > /root/installation/master_{{ item.name }}.ign
+  loop: "{{ controlplane }}"
+
+- name: Generate ignition files for workers
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    butane /root/installation/butane_{{ item.name }}.yaml > /root/installation/worker_{{ item.name }}.ign
+  loop: "{{ compute }}"
+
+# - name: Get iso from print-stream-json
+#   ansible.builtin.shell: |
+#     /root/openshift-install coreos print-stream-json | grep '\.iso[^.]' | grep "x86_64" | tr " " "\n" | grep http | tr -d ',"'
+#   register: fcos_url
+#   when: 'loadbalancers[0].name in inventory_hostname'
+
+# - name: Set fact for downloading the image later
+#   when: 'loadbalancers[0].name in inventory_hostname'
+#   ansible.builtin.set_fact:
+#     fcos_iso: "{{ fcos_url.stdout }}"
+
+# - name: Get qcow2 url
+#   ansible.builtin.shell: |
+#     /root/openshift-install coreos print-stream-json | grep 'qcow2' | grep "x86_64" | grep location | grep qemu | tr " " "\n" | grep http | tr -d ',"'
+#   register: fcos_qcow2
+#   when: 'loadbalancers[0].name in inventory_hostname'
+
+# - name: Set fact for downloading the qcow2 later
+#   when: 'loadbalancers[0].name in inventory_hostname'
+#   ansible.builtin.set_fact:
+#     fcos_qcow2: "{{ fcos_qcow2.stdout }}"

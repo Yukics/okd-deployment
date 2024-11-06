@@ -1,0 +1,95 @@
+global
+  stats socket /var/run/api.sock 
+  log 127.0.0.1:514 local0 info
+  pidfile     /var/run/haproxy.pid
+  maxconn 4000
+  daemon
+  
+resolvers mydns
+{% for item in dns %}
+  nameserver dns{{ loop.index }} {{ item }}:53
+{% endfor %}
+  hold valid 1s
+
+defaults
+  default-server init-addr none
+  mode http
+  log global
+  option dontlognull
+  option http-server-close
+  option redispatch
+  retries 3
+  timeout http-request    10s
+  timeout queue           1m
+  timeout connect         10s
+  timeout client          1m
+  timeout server          1m
+  timeout http-keep-alive 10s
+  timeout check           10s
+  maxconn 3000
+  # log-format {\"http_bytes\":%B,\"http_captured_request_cookie\":\"%CC\",\"http_captured_response_cookie\":\"%CS\",\"haproxy_hostname\":\"%H\",\"http_domain\":\"%[capture.req.hdr(0)]\",\"http_method\":\"%HM\",\"http_path\":\"%HPO\",\"http_query\":\"%HQ\",\"http_version\":\"%HV\",\"haproxy_unique_id\":\"%ID\",\"http_code\":%ST,\"http_active_time\":%Ta,\"http_handshake_time\":%Th,\"http_idle_time\":%Ti,\"http_full_request_from_1byte_time\":%TR,\"http_response_time\":%Tr,\"timestamp\":%Ts,\"http_bytes_upload\":%U,\"haproxy_active_connections\":%ac,\"haproxy_backend\":\"%b\",\"haproxy_backend_concurrent_connections\":\"%bc\",\"haproxy_backend_ip\":\"%bi\",\"haproxy_backend_port\":\"%bp\",\"haproxy_backend_queue\":\"%bq\",\"http_client_ip\":\"%ci\",\"http_client_port\":\"%cp\",\"haproxy_frontend\":\"%f\",\"haproxy_frontend_concurrent_connections\":%fc,\"haproxy_frontend_ip\":\"%fi\",\"haproxy_frontend_port\":\"%fp\",\"haproxy_frontend_transport\":\"%ft\",\"haproxy_frontend_log_counter\":%lc,\"http_captured_request_headers\":\"%hr\",\"http_captured_response_headers\":\"%hs\",\"haproxy_pid\":%pid,\"http_request\":\"%r\",\"http_retries\":%rc,\"haproxy_request_counter\":%rt,\"haproxy_server_name\":\"%s\",\"haproxy_concurrent_connections\":%sc,\"haproxy_server_ip\":\"%si\",\"haproxy_server_port\":\"%sp\",\"haproxy_server_queue\":%sq,\"haproxy_timestamp\":\"%t\",\"haproxy_termination_status\":\"%tsc\"}
+
+# Stats 
+frontend stats
+  mode http
+  bind *:8404
+  monitor-uri /healthz
+  http-request use-service prometheus-exporter if { path /metrics }
+  # acl internal_networks src 192.168.69.0/24 172.16.250.0/24
+  # stats http-request deny unless internal_networks
+  stats enable
+  stats hide-version
+  stats show-legends
+  stats show-node
+  stats uri /stats
+  stats refresh 10s
+  stats admin if TRUE
+  # stats admin if 192.168.69.0/24
+  # stats admin auth <username:password> # enable to setup basic http auth
+
+frontend ignition-8000
+  mode http
+  bind *:8000
+  default_backend ignition
+  # acl allowed_ip src {{ haproxy_acl_network }}
+  # http-request reject if !allowed_ip
+
+backend ignition
+  mode http
+  balance roundrobin
+  server ignition-1 127.0.0.1:8080 check inter 1s
+
+listen api-server-6443 
+  bind *:6443
+  mode tcp
+  option  httpchk GET /readyz HTTP/1.0
+  option  log-health-checks
+  balance roundrobin
+  server bootstrap bootstrap.{{ domain }}:6443 verify none check check-ssl inter 10s fall 2 rise 3 backup 
+{% for item in controlplane %}
+  server {{ item.name }} {{ item.name }}.{{ domain }}:6443 weight 1 verify none check check-ssl inter 10s fall 2 rise 3
+{% endfor %}
+
+listen machine-config-server-22623 
+  bind *:22623
+  mode tcp
+  server bootstrap bootstrap.{{ domain }}:22623 check inter 1s backup 
+{% for item in controlplane %}
+  server {{ item.name }} {{ item.name }}.{{ domain }}:22623 check inter 1s
+{% endfor %}
+
+listen ingress-router-443 
+  bind *:443
+  mode tcp
+  balance source
+{% for item in compute %}
+  server {{ item.name }} {{ item.name }}.{{ domain }}:443 check inter 1s
+{% endfor %}
+
+listen ingress-router-80 
+  bind *:80
+  mode tcp
+  balance source
+{% for item in compute %}
+  server {{ item.name }} {{ item.name }}.{{ domain }}:80 check inter 1s
+{% endfor %}

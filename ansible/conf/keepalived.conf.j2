@@ -1,0 +1,41 @@
+global_defs {
+
+   notification_email {
+       admin@yuki.es
+   }
+   notification_email_from noreply@yuki.es
+   smtp_server 127.0.0.1
+   smtp_connect_timeout 60
+   vrrp_garp_interval 0.001
+   vrrp_gna_interval 0.000001
+   enable_script_security 
+}
+
+vrrp_script chk_haproxy {
+  script '/usr/bin/bash -c "curl http://localhost:8404/healthz"' # check the haproxy process
+  interval 10 # every 2 seconds
+  weight 2 # add 2 points if OK
+  user yuki
+}
+
+vrrp_instance VI_1 {
+  interface eth0 # interface to monitor
+{% if '01' in ansible_hostname %}
+  state MASTER # MASTER on haproxy, BACKUP on haproxy2
+{% else %}
+  state BACKUP # MASTER on haproxy, BACKUP on haproxy2
+{% endif %}
+
+  virtual_router_id 51
+{% if '01' in ansible_hostname %}
+  priority 201
+{% else %}
+  priority {{ range(101, 200) | random }}# 101 on haproxy, 100 on haproxy2
+{% endif %}
+  virtual_ipaddress {
+    {{ loadbalancer }} # virtual ip address
+  }
+  track_script {
+    chk_haproxy
+  }
+}

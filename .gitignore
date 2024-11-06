@@ -1,0 +1,4 @@
+ansible/conf/redhat.yaml
+ansible/conf/opnsense.yaml
+ansible/conf/dns.yaml
+ansible/conf/proxmox.yaml

@@ -1,0 +1,11 @@
+[Unit]
+Description=Set fan speed
+After=network.target
+
+[Service]
+ExecStart=/root/scripts/set_fan_speed.sh
+RemainAfterExit=true
+Type=oneshot
+
+[Install]
+WantedBy=multi-user.target

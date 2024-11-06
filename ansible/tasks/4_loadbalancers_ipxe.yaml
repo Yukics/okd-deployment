@@ -1,0 +1,85 @@
+- name: Get img for iPXE
+  ansible.builtin.shell: |
+    mkdir -p /root/installation/media/fedora-coreos
+    for IMAGE_URL in `/root/openshift-install coreos print-stream-json | grep -Eo '"https.*(kernel-|initramfs.|rootfs.)\w+(\.img)?"' | grep x86 | tr -d '"'`; do
+      if [ ! -f "/root/installation/media/fedora-coreos/$(echo $IMAGE_URL | tr "/" "\n" | tail -1)" ]; then
+         wget $IMAGE_URL -O /root/installation/media/fedora-coreos/$(echo $IMAGE_URL | tr "/" "\n" | tail -1)
+      fi
+    done
+
+- name: Set fedora core os version
+  ansible.builtin.shell: |
+    /root/openshift-install coreos print-stream-json | grep -Eo '"https.*(kernel-|initramfs.|rootfs.)\w+(\.img)?"' | grep x86 | tr -d '"' | head -1 | head -1 | tr "/" "\n" | egrep "^[0-9].*$"
+  register: fcos_version
+
+- name: Install packages
+  ansible.builtin.yum:
+    name: 
+     - ipxe-bootimgs 
+     - dnsmasq 
+     - tftp-server
+     - gcc
+     - binutils
+     - make
+     - perl
+     - xz
+     - xz-devel
+     - mtools
+     - syslinux
+     - mkisofs
+    state: latest
+
+- name: Create tftpboot directory
+  ansible.builtin.file:
+    path: /tftpboot
+    state: directory
+    mode: 0755
+
+- name: Change the tftpdir_t domain to permissive
+  community.general.selinux_permissive:
+    name: dnsmasq_t
+    permissive: true
+
+- name: Copy files
+  ansible.builtin.shell: |
+      cp /usr/share/ipxe/{undionly.kpxe,ipxe-x86_64.efi} /tftpboot/
+
+- name: Create menu directory
+  ansible.builtin.file:
+    path: /tftpboot/menu
+    state: directory
+
+- name: Generate boot conf
+  ansible.builtin.template:
+    src: conf/boot.ipxe.j2
+    dest: /tftpboot/menu/boot.ipxe
+    owner: root
+    mode: '0664'
+
+- name: Generate dnsmasq conf
+  ansible.builtin.template:
+    src: conf/dnsmasq.conf.j2
+    dest: /etc/dnsmasq.conf
+    owner: root
+    mode: '0660'
+    validate: dnsmasq -C %s --test
+    backup: yes
+
+- name: Allow ports through firewall
+  ansible.posix.firewalld:
+    service: '{{ item }}'
+    zone: public
+    immediate: true
+    permanent: true
+    state: enabled
+  loop: 
+    - dhcp
+    - tftp
+    - dns
+
+- name: Restart service dnsmasq
+  run_once: true
+  ansible.builtin.service:
+    name: dnsmasq
+    state: restarted
+    enabled: yes

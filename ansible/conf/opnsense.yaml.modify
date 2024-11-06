@@ -1,0 +1,5 @@
+opnsense_host: "opnsense.yuki.es"
+opnsense_kea_dhcp_port: 8000
+opnsense_kea_dhcp_subnet_id: 1
+opnsense_key: "<key>"
+opnsense_secret: "<secret>"

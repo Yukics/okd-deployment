@@ -1,0 +1,184 @@
+- name: Create controlplane VM
+  community.general.proxmox_kvm:
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    api_host: "{{ proxmox_api_host }}"
+    api_port: "{{ proxmox_api_port }}"
+    validate_certs: false
+    node: "{{ item.node }}"
+    clone: "okd-fcos-template"
+    vmid: "{{ okd_template_nodes | selectattr('node', 'equalto', item.node) | map(attribute='id') | list | join('') }}"
+    newid: "{{ item.id }}"
+    full: true
+    name: "{{ item.name }}"
+    bios: ovmf
+    cores: "{{ item.cores }}"
+    cpu: "host"
+    memory: "{{ item.memory }}"
+    storage: "{{ disk_storage }}"
+    autostart: true
+    onboot: true
+    efidisk0:
+      storage: "{{ disk_storage }}"
+      format: raw
+      efitype: 4m
+      pre_enrolled_keys: 1
+    ostype: "l26"
+    state: present
+    timeout: 90
+  loop: "{{ controlplane }}"
+
+- name: Pause for 1 minutes, wait creation VM
+  ansible.builtin.pause:
+    minutes: 1
+
+- name: Update controlplane VM
+  community.general.proxmox_kvm:
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    api_host: "{{ proxmox_api_host }}"
+    api_port: "{{ proxmox_api_port }}"
+    validate_certs: false
+    node: "{{ item.node }}"
+    vmid: "{{ item.id }}"
+    name: "{{ item.name }}"
+    tags:
+      - okd
+      - controlplane
+    agent: enabled=1
+    cores: "{{ item.cores }}"
+    cpu: "host"
+    memory: "{{ item.memory }}"
+    args: -fw_cfg 'name=opt/com.coreos/config,file=/mnt/pve/{{ iso_storage }}/snippets/bootstrap_{{ item.name }}.ign'
+    net:
+      net0: 'virtio,bridge=vmbr0'
+    storage: local-zfs
+    autostart: true
+    onboot: true
+    timeout: 90
+    update: true
+    boot: "order=scsi0"
+    ipconfig:
+      ipconfig0: "ip={{ item.ip }}/24,gw={{ gateway }}"
+    nameservers: "{{ dns }}"
+    searchdomains: "{{ searchdomain }}"
+  loop: "{{ controlplane }}"
+
+- name: Add disk in VM (do not rewrite in case it exists already)
+  community.general.proxmox_disk:
+    api_host: node1
+    api_user: root@pam
+    api_token_id: token1
+    api_token_secret: some-token-data
+    name: vm-name
+    disk: scsi3
+    backup: true
+    cache: none
+    storage: local-zfs
+    size: 5
+    state: present
+
+- name: Pause for 1 minute, wait VM to create
+  ansible.builtin.pause:
+    minutes: 1
+
+- name: Start controlplane VM
+  community.general.proxmox_kvm:
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    api_host: "{{ proxmox_api_host }}"
+    api_port: "{{ proxmox_api_port }}"
+    validate_certs: false
+    node: "{{ item.node }}"
+    name: "{{ item.name }}"
+    state: started
+    timeout: 90
+  loop: "{{ controlplane }}"
+
+- name: Pause for 1 minute, wait VM to create
+  ansible.builtin.pause:
+    minutes: 1
+
+- name: Add new hosts to pb execution
+  add_host: 
+    name: "{{ item.name }}.{{ domain }}" 
+    ansible_ssh_host: "{{ item.ip }}" 
+    groups: controlplane_hosts
+    ansible_user: "{{ item.user }}"
+  loop: "{{ controlplane }}"
+
+# - name: Pause for 1 minute, wait VM to start
+#   ansible.builtin.pause:
+#     minutes: 1
+
+# - name: Get controlplane VM MAC addresses
+#   community.general.proxmox_vm_info:
+#     api_user: "{{ proxmox_api_user }}"
+#     api_password: "{{ hostvars['localhost']['proxmox_api_password'] }}"
+#     api_host: "{{ proxmox_api_host }}"
+#     api_port: "{{ proxmox_api_port }}"
+#     validate_certs: false
+#     node: "{{ item.node }}"
+#     name: "{{ item.name }}"
+#     config: current
+#   loop: "{{ controlplane }}"
+#   register: created_controlplanes
+
+# - name: Retrieve IP from KEA DHCP opnsense
+#   ansible.builtin.uri:
+#     url: http://{{ opnsense_host }}:{{ opnsense_kea_dhcp_port }}
+#     method: POST
+#     body_format: json
+#     status_code: [200]
+#     return_content: true
+#     headers:
+#       Content-Type: application/json
+#     body: |
+#       {
+#           "command": "lease4-get",
+#           "service": [ "dhcp4" ], 
+#           "arguments": {
+#               "identifier-type": "hw-address",
+#               "identifier": "{{ item.proxmox_vms[0].config.net0 | split(",") | first | split("=") | last }}",
+#               "subnet-id": {{ opnsense_kea_dhcp_subnet_id }}
+#           }
+#       }
+#   loop: "{{ created_controlplanes.results }}"
+#   register: controlplanes_leases
+
+# - name: Set list of IP leased by DHCP
+#   set_fact: 
+#     controlplanes_ips: "{{ controlplanes_ips | default([]) + [item.json[0].arguments['ip-address']] }}"
+#   loop: "{{ controlplanes_leases.results }}"
+
+# - name: Set list of VM info
+#   set_fact: 
+#     created_controlplanes: "{{ created_controlplanes.results }}"
+
+# - name: Add new controlplane hosts to pb execution
+#   add_host: 
+#     name: "{{ item.1.name }}.{{ domain }}" 
+#     ansible_ssh_host: "{{ item.0 }}" 
+#     groups: controlplane_hosts
+#     ansible_user: "root"
+#   loop: "{{ controlplanes_ips | zip(controlplane) | list }}"
+
+# - name: Download public key to new core os VM and dependencies
+#   pause:
+#     prompt: |
+#       Execute as root (sudo su): 
+#         nmcli --offline connection add type ethernet con-name "Wired Connection 1" \
+#         connection.autoconnect true \
+#         connection.uuid "$(nmcli conn show | grep -v lo | tail -1 | awk '{print $4}')" \
+#         connection.type "802-3-ethernet" \
+#         ipv4.addresses "<IP address>/<CIDR>" \
+#         ipv4.gateway "{{ gateway }}" \
+#         ipv4.dns "{{ dns | join(',') }}" \
+#         ipv4.dns-search "{{ searchdomain }}" \
+#         ipv4.method manual > /root/ens18.nmconnection
+
+#         URL="http:/{{ loadbalancer }}:8000/bootstrap.ign"
+#         SHA512=$(curl $URL | sha512sum)
+#         coreos-installer install --ignition-url=$URL /dev/sda --ignition-hash=sha512-$SHA512 --network-keyfile /root/ens18.nmconnection
+      
+#       Press Ctrl+c and the "c" to resume or "a" to abort
