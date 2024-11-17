@@ -35,7 +35,7 @@ frontend stats
   bind *:8404
   monitor-uri /healthz
   http-request use-service prometheus-exporter if { path /metrics }
-  # acl internal_networks src 192.168.69.0/24 172.16.250.0/24
+  # acl internal_networks src {{ haproxy_acl_network }}
   # stats http-request deny unless internal_networks
   stats enable
   stats hide-version
@@ -44,15 +44,14 @@ frontend stats
   stats uri /stats
   stats refresh 10s
   stats admin if TRUE
-  # stats admin if 192.168.69.0/24
+  # stats admin if {{ haproxy_acl_network }}
   # stats admin auth <username:password> # enable to setup basic http auth
 
 frontend ignition-8000
   mode http
   bind *:8000
+  option forwardfor
   default_backend ignition
-  # acl allowed_ip src {{ haproxy_acl_network }}
-  # http-request reject if !allowed_ip
 
 backend ignition
   mode http
@@ -65,31 +64,31 @@ listen api-server-6443
   option  httpchk GET /readyz HTTP/1.0
   option  log-health-checks
   balance roundrobin
-  server bootstrap bootstrap.{{ domain }}:6443 verify none check check-ssl inter 10s fall 2 rise 3 backup 
+  server bootstrap bootstrap.{{ cluster_name }}.{{ searchdomain }}:6443 verify none check check-ssl inter 10s fall 2 rise 3 backup resolvers mydns
 {% for item in controlplane %}
-  server {{ item.name }} {{ item.name }}.{{ domain }}:6443 weight 1 verify none check check-ssl inter 10s fall 2 rise 3
+  server {{ item.name }} {{ item.name }}.{{ cluster_name }}.{{ searchdomain }}:6443 weight 1 verify none check check-ssl inter 10s fall 2 rise 3 resolvers mydns
 {% endfor %}
 
 listen machine-config-server-22623 
   bind *:22623
   mode tcp
-  server bootstrap bootstrap.{{ domain }}:22623 check inter 1s backup 
+  server bootstrap bootstrap.{{ cluster_name }}.{{ searchdomain }}:22623 check inter 1s backup resolvers mydns 
 {% for item in controlplane %}
-  server {{ item.name }} {{ item.name }}.{{ domain }}:22623 check inter 1s
+  server {{ item.name }} {{ item.name }}.{{ cluster_name }}.{{ searchdomain }}:22623 check inter 1s resolvers mydns
 {% endfor %}
 
 listen ingress-router-443 
   bind *:443
   mode tcp
   balance source
-{% for item in compute %}
-  server {{ item.name }} {{ item.name }}.{{ domain }}:443 check inter 1s
+{% for item in infra %}
+  server {{ item.name }} {{ item.name }}.{{ cluster_name }}.{{ searchdomain }}:443 check inter 1s resolvers mydns
 {% endfor %}
 
 listen ingress-router-80 
   bind *:80
   mode tcp
   balance source
-{% for item in compute %}
-  server {{ item.name }} {{ item.name }}.{{ domain }}:80 check inter 1s
+{% for item in infra %}
+  server {{ item.name }} {{ item.name }}.{{ cluster_name }}.{{ searchdomain }}:80 check inter 1s resolvers mydns
 {% endfor %}

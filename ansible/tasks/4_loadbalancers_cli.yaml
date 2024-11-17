@@ -9,30 +9,39 @@
     path: /root/installation
     state: directory
 
-- name: Generate an OpenSSH ed25519 keypair
-  community.crypto.openssh_keypair:
-    path: /root/.ssh/id_ssh_ed25519_okd
-    size: 4096
-    type: ed25519
+- name: Check if openshift-install is installed
+  ansible.builtin.shell: |
+    if [[ -f /root/openshift-install ]]; then
+      echo OK
+    else
+      echo KO
+    fi
+  register: opinstall_check
 
-- name: Load ssh public key as variable
-  ansible.builtin.slurp:
-    src: /root/.ssh/id_ssh_ed25519_okd.pub
-  register: ssh_public_key
+- name: Check if oc is installed
+  ansible.builtin.shell: |
+    if [[ -f /bin/oc ]]; then
+      echo OK
+    else
+      echo KO
+    fi
+  register: oc_check
 
 - name: Download installation program
   retries: 3
-  delay: 3
+  delay: 5
   ansible.builtin.get_url:
-    url: https://github.com/okd-project/okd/releases/download/4.15.0-0.okd-2024-03-10-010116/openshift-install-linux-4.15.0-0.okd-2024-03-10-010116.tar.gz
+    url: https://github.com/okd-project/okd/releases/download/{{ cluster_version }}/openshift-install-linux-{{ cluster_version }}.tar.gz
     dest: /root/openshift-install-linux.tar.gz
     mode: '0660'
+  when: 'opinstall_check.stdout == "KO"'
 
 - name: Extract openshift-install-linux.tar.gz into /root/openshift-install
   ansible.builtin.unarchive:
     remote_src: true
     src: /root/openshift-install-linux.tar.gz
     dest: /root
+  when: 'opinstall_check.stdout == "KO"'
 
 - name: Download oc
   retries: 3
@@ -40,26 +49,11 @@
     url: https://mirror.openshift.com/pub/openshift-v4/clients/oc/latest/linux/oc.tar.gz
     dest: /root/oc.tar.gz
     mode: '0660'
-
-# - name: Download spruce
-#   retries: 3
-#   ansible.builtin.get_url:
-#     url: https://github.com/geofffranks/spruce/releases/download/v1.31.1/spruce-linux-amd64
-#     dest: /usr/bin/spruce
-#     mode: '0661'
+  when: 'oc_check.stdout == "KO"'
 
 - name: Extract oc.tar.gz into /usr/bin
   ansible.builtin.unarchive:
     remote_src: true
     src: /root/oc.tar.gz
     dest: /usr/bin
-
-- name: Install butane
-  ansible.builtin.yum:
-    name: butane
-    state: latest
-    
-# - name: Install sshpass
-#   ansible.builtin.yum:
-#     name: sshpass
-#     state: latest
+  when: 'oc_check.stdout == "KO"'

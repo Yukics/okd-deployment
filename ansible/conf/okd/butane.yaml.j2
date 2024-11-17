@@ -3,11 +3,10 @@ version: 1.5.0
 ignition:
   config:
     merge:
-      - source: http://{{ loadbalancer }}:8000/{{ type }}.ign
+      - source: http://{{ loadbalancer_ip }}:8000/installation/{{ type }}.ign
 kernel_arguments:
   should_exist:
-    - ip={{ item.ip }}::{{ gateway }}:255.255.255.0:{{ item.name }}.{{ domain }}:ens18:none
-    - nameserver={{ dns | join(":") }}
+    - 'crashkernel=300M'
 storage:
   files:
     - path: /etc/zincati/config.d/55-updates-strategy.toml
@@ -16,18 +15,17 @@ storage:
           [updates]
           strategy = "periodic"
           [[updates.periodic.window]]
-          days = [ "Sat", "Sun" ]
+          days = [ "Sun" ]
           start_time = "22:30"
           length_minutes = 60
-#    - path: /etc/vconsole.conf
-#      mode: 0644
-#      contents:
-#        inline: KEYMAP=es
+    - path: /etc/vconsole.conf
+      mode: 0644
+      contents:
+        inline: KEYMAP=es
     - path: /etc/hostname
       mode: 0644
       contents:
-        inline: |
-          {{ item.name }}
+        inline: {{ item.name }}.{{ cluster_name }}.{{ searchdomain }}
     - path: /etc/NetworkManager/system-connections/ens18.nmconnection
       mode: 0600
       contents:
@@ -47,6 +45,11 @@ passwd:
   users:
     - name: core
       ssh_authorized_keys:
-        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIItNs6VIKT7ggUjhfnVedzON41XHI/pUn6A/gS5YHAuM yuki@yukiV2
-        - ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIE+FFDoXjiC4vdqb6GQcQQckEdWJljsE8V/tHIF8DR4i yuki@yukiV2
-#        - {{ hostvars[loadbalancers[0].name+"."+domain]['ssh_public_key']['content'] | b64decode}}
+        - {{ hostvars[loadbalancer[0].name+"."+cluster_name+"."+searchdomain]['ssh_public_key']['content'] | b64decode | trim }} {{ loadbalancer[0].user }}@{{ loadbalancer[0].name }}
+{% for item in sshkeys %}
+        - {{ item }}
+{% endfor %}        
+systemd:
+  units:
+  - name: kdump.service
+    enabled: true

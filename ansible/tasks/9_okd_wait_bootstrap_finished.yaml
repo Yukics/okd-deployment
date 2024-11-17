@@ -1,0 +1,9 @@
+- name: Wait for bootstrap to finish
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    cd /root/installation
+    ../openshift-install wait-for bootstrap-complete
+  register: wait_finish
+  retries: 120
+  delay: 30
+  until: "'safe to remove the bootstrap resources' in wait_finish.stderr"

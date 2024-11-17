@@ -44,7 +44,7 @@
 #     cpu: "host"
 #     ostype: "l26"
 #     efidisk0:
-#       storage: "{{ disk_storage }}"
+#       storage: "{{ proxmox_disk_storage }}"
 #       format: raw
 #       efitype: 4m
 #       pre_enrolled_keys: 1

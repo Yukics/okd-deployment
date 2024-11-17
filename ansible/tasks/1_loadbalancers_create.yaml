@@ -1,5 +1,7 @@
 ---
-- name: Create loadbalancers VM
+# TODO: - name: Get this hosts ssh public keys
+
+- name: Create loadbalancer VM
   community.general.proxmox_kvm:
     api_user: "{{ proxmox_api_user }}"
     api_password: "{{ proxmox_api_password }}"
@@ -14,7 +16,15 @@
     full: true
     state: present
     timeout: 90
-  loop: "{{ loadbalancers }}"
+  loop: "{{ loadbalancer }}"
+  loop_control:
+    label: "{{ item.name }}"
+  async: 100
+  poll: 5
+
+- name: "Pause for 5s, wait for VM creation"
+  ansible.builtin.pause:
+    seconds: 5
 
 - name: Configure cloned VM
   community.general.proxmox_kvm:
@@ -33,14 +43,21 @@
     cores: "{{ item.cores }}"
     cpu: "host"
     memory: "{{ item.memory }}"
-    storage: "{{ disk_storage }}"
+    balloon: 0
+    storage: "{{ proxmox_disk_storage }}"
     autostart: true
     onboot: true
     timeout: 90
     update: true
-  loop: "{{ loadbalancers }}"
+  loop: "{{ loadbalancer }}"
+  loop_control:
+    label: "{{ item.name }}"
 
-- name: Update cloned VM with new Cloud-init
+- name: "Pause for 5s, wait for configuration to get applied"
+  ansible.builtin.pause:
+    seconds: 5
+
+- name: Update cloned VM with Cloud-init
   community.general.proxmox_kvm:
     api_user: "{{ proxmox_api_user }}"
     api_password: "{{ proxmox_api_password }}"
@@ -52,17 +69,23 @@
     name: "{{ item.name }}"
     ciuser: "{{ item.user }}"
     cipassword: "{{ item.password }}"
-    sshkeys: "{{ sshkeys }}"
-    # boot: "order=scsi0;ide2"
+    sshkeys: "{{ sshkeys | join ('\n') }}"
+    boot: "order=scsi0;ide2"
     ipconfig:
       ipconfig0: "ip={{ item.ip }}/24,gw={{ gateway }}"
     nameservers: "{{ dns }}"
     searchdomains: "{{ searchdomain }}"
     timeout: 90
     update: true
-  loop: "{{ loadbalancers }}"
+  loop: "{{ loadbalancer }}"
+  loop_control:
+    label: "{{ item.name }}"
 
-- name: Start loadbalancers VM
+- name: "Pause for 5s, wait for cloud-init to get applied"
+  ansible.builtin.pause:
+    seconds: 5
+
+- name: Start loadbalancer VM
   community.general.proxmox_kvm:
     api_user: "{{ proxmox_api_user }}"
     api_password: "{{ proxmox_api_password }}"
@@ -72,19 +95,30 @@
     name: "{{ item.name }}"
     timeout: 90
     state: started
-  loop: "{{ loadbalancers }}"
+  loop: "{{ loadbalancer }}"
+  loop_control:
+    label: "{{ item.name }}"
 
 - name: Add new hosts to pb execution
   add_host: 
-    name: "{{ item.name }}.{{ domain }}" 
+    name: "{{ item.name }}.{{ cluster_name }}.{{ searchdomain }}" 
     ansible_ssh_host: "{{ item.ip }}" 
-    groups: loadbalancers_hosts
+    groups: loadbalancer_hosts
     ansible_user: "{{ item.user }}"
-  loop: "{{ loadbalancers }}"
+  loop: "{{ loadbalancer }}"
+  loop_control:
+    label: "{{ item.name }}"
 
-- name: Pause for 2 minutes, wait VM to start
-  ansible.builtin.pause:
-    minutes: 2
+- name: Wait for port 22 to become open and contain "OpenSSH"
+  ansible.builtin.wait_for:
+    port: 22
+    host: '{{ item.ip }}'
+    search_regex: OpenSSH
+    delay: 1
+    timeout: 600
+  loop: '{{ loadbalancer }}'
+  loop_control:
+    label: "{{ item.name }}"
 
 - name: Remove cloud-init drive
   community.general.proxmox_disk:
@@ -96,4 +130,6 @@
     vmid: '{{item.id}}'
     disk: 'ide2'
     state: absent
-  loop: '{{ loadbalancers }}'
+  loop: '{{ loadbalancer }}'
+  loop_control:
+    label: "{{ item.name }}"

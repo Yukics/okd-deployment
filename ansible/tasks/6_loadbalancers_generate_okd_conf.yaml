@@ -1,0 +1,89 @@
+- name: Install butane
+  ansible.builtin.yum:
+    name: butane
+    state: latest
+
+- name: Generate an OpenSSH ed25519 keypair
+  community.crypto.openssh_keypair:
+    path: /root/.ssh/id_ssh_ed25519_okd
+    size: 4096
+    type: ed25519
+    force: false
+
+- name: Load ssh public key as variable
+  ansible.builtin.slurp:
+    src: /root/.ssh/id_ssh_ed25519_okd.pub
+  register: ssh_public_key
+
+- name: Generate install-config.yaml
+  ansible.builtin.template:
+    src: conf/okd/install-config.yaml.j2
+    dest: /root/installation/install-config.yaml
+    owner: root
+    mode: '0660'
+    backup: yes
+  when: 'loadbalancer[0].name in inventory_hostname'
+
+- name: Create ignition and manifest from previous config
+  ansible.builtin.shell: |
+    /root/openshift-install create manifests --dir /root/installation
+  when: 'loadbalancer[0].name in inventory_hostname'
+
+- name: Set mastersSchedulable to false
+  yedit:
+    src: /root/installation/manifests/cluster-scheduler-02-config.yml
+    key: spec.mastersSchedulable
+    value: false
+  when: 'loadbalancer[0].name in inventory_hostname'
+
+- name: Create ignition and manifest from previous config
+  ansible.builtin.shell: |
+    /root/openshift-install create ignition-configs --dir /root/installation
+  when: 'loadbalancer[0].name in inventory_hostname'
+
+- name: Generate butane conf for bootstrap
+  when: 'loadbalancer[0].name in inventory_hostname'
+  ansible.builtin.template:
+    src: conf/okd/butane.yaml.j2
+    dest: /root/installation/butane_{{ item.name }}.yaml
+    owner: root
+    mode: '0660'
+  loop: "{{ bootstrap }}"
+  loop_control:
+    label: "{{ item.name }}"
+  vars:
+    type: bootstrap
+
+- name: Generate butane conf for controlplane
+  when: 'loadbalancer[0].name in inventory_hostname'
+  ansible.builtin.template:
+    src: conf/okd/butane.yaml.j2
+    dest: /root/installation/butane_{{ item.name }}.yaml
+    owner: root
+    mode: '0660'
+  loop: "{{ controlplane }}"
+  loop_control:
+    label: "{{ item.name }}"
+  vars:
+    type: master
+
+- name: Generate butane conf for worker
+  when: 'loadbalancer[0].name in inventory_hostname'
+  ansible.builtin.template:
+    src: conf/okd/butane.yaml.j2
+    dest: /root/installation/butane_{{ item.name }}.yaml
+    owner: root
+    mode: '0660'
+  loop: "{{ compute + infra + storage + monitoring }}"
+  loop_control:
+    label: "{{ item.name }}"
+  vars:
+    type: worker
+
+- name: Generate ignition files
+  when: 'loadbalancer[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    butane /root/installation/butane_{{ item.name }}.yaml > /root/installation/{{ item.name }}.ign
+  loop: "{{ bootstrap + compute + controlplane + infra + storage + monitoring }}"
+  loop_control:
+    label: "{{ item.name }}"

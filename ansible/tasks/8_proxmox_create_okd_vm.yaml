@@ -1,0 +1,107 @@
+- name: "Create VM {{ item.name }}"
+  community.general.proxmox_kvm:
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    api_host: "{{ proxmox_api_host }}"
+    api_port: "{{ proxmox_api_port }}"
+    validate_certs: false
+    node: "{{ item.node }}"
+    vmid: "{{ item.id }}"
+    name: "{{ item.name }}"
+    bios: ovmf
+    cores: "{{ item.cores }}"
+    cpu: "host"
+    memory: "{{ item.memory }}"
+    balloon: 0
+    storage: "{{ proxmox_disk_storage }}"
+    autostart: true
+    onboot: true
+    scsihw: virtio-scsi-single
+    tags:
+      - okd
+    net:
+      net0: 'virtio,bridge=vmbr0'
+    efidisk0:
+      storage: "{{ proxmox_disk_storage }}"
+      format: raw
+      efitype: 4m
+      pre_enrolled_keys: 0
+    ostype: "l26"
+    state: present
+    timeout: 90
+
+- name: "Pause for 30 s, wait creation VM {{ item.name }}"
+  ansible.builtin.pause:
+    seconds: 30
+
+- name: "Add disks to VM {{ item.name }}"
+  community.general.proxmox_disk:
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    api_host: "{{ proxmox_api_host }}"
+    api_port: "{{ proxmox_api_port }}"
+    validate_certs: false
+    vmid: "{{ item.id }}"
+    disk: "scsi{{ idx }}"
+    backup: true
+    cache: none
+    storage: "{{ proxmox_disk_storage }}"
+    size: "{{ disk }}"
+    state: present
+  loop: "{{ item.disks }}"
+  loop_control:
+    loop_var: disk
+    index_var: idx
+
+- name: "Update netboot VM {{ item.name }}"
+  community.general.proxmox_kvm:
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    api_host: "{{ proxmox_api_host }}"
+    api_port: "{{ proxmox_api_port }}"
+    validate_certs: false
+    node: "{{ item.node }}"
+    vmid: "{{ item.id }}"
+    name: "{{ item.name }}"
+    agent: enabled=1
+    timeout: 90
+    boot: "order=scsi0;net0"
+    update: true
+
+- name: "Start VM {{ item.name }}"
+  community.general.proxmox_kvm:
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    api_host: "{{ proxmox_api_host }}"
+    api_port: "{{ proxmox_api_port }}"
+    validate_certs: false
+    node: "{{ item.node }}"
+    name: "{{ item.name }}"
+    state: started
+    timeout: 90
+
+- name: "Wait for port 22 to become open and contain OpenSSH on {{ item.name }}"
+  ansible.builtin.wait_for:
+    port: 22
+    host: "{{ item.name }}.{{ cluster_name }}.{{ searchdomain }}"
+    search_regex: OpenSSH
+    delay: 20
+    timeout: 1200
+  connection: local
+
+- name: "Remove net boot from VM {{ item.name }}"
+  community.general.proxmox_kvm:
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    api_host: "{{ proxmox_api_host }}"
+    api_port: "{{ proxmox_api_port }}"
+    validate_certs: false
+    node: "{{ item.node }}"
+    vmid: "{{ item.id }}"
+    name: "{{ item.name }}"
+    timeout: 90
+    update: true
+    boot: "order=scsi0"
+
+- debug:
+    msg: "Created {{ item.name }}"

@@ -26,7 +26,7 @@
 
 - name: Generate keepalived conf
   ansible.builtin.template:
-    src: conf/keepalived.conf.j2
+    src: conf/loadbalancer/keepalived.conf.j2
     dest: /etc/keepalived/keepalived.conf
     owner: root
     mode: '0660'

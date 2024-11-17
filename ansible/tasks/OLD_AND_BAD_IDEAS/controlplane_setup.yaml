@@ -1,0 +1,40 @@
+- name: Copy SSh Key | copying shh key to remote host
+  authorized_key:
+     user: "core"
+     state: present
+     key: "{{ lookup('file', item) }}"
+  with_fileglob:
+  - ~/.ssh/id_ed25519.pub
+  become: true
+
+
+- name: Get interface UUID
+  ansible.builtin.shell: |
+    nmcli conn show | grep -v lo | tail -1 | awk '{print $4}'
+  register: uuid
+
+- name: Get interface IP
+  ansible.builtin.shell: |
+    echo "{{ hostvars['localhost']['created_controlplanes'] }}"
+  register: ip
+
+- debug:
+    var: ip.stdout
+
+- name: Generate nmcli keyfile
+  ansible.builtin.shell: |
+    nmcli --offline connection add type ethernet con-name "Wired Connection 1" \
+    connection.autoconnect true \
+    connection.uuid "{{ uuid.stdout }}" \
+    connection.type "802-3-ethernet" \
+    ipv4.addresses "192.168.69.200/24" \
+    ipv4.gateway "{{ gateway }}" \
+    ipv4.dns "{{ dns | join(',') }}" \
+    ipv4.dns-search "{{ searchdomain }}" \
+    ipv4.method manual > /root/ens18.nmconnection
+
+# - name: Install controlplane
+#   ansible.builtin.shell: |
+#     URL="http:/{{ loadbalancer }}:8000/bootstrap.ign"
+#     SHA512=$(curl $URL | sha512sum)
+#     coreos-installer install --ignition-url=$URL /dev/sda --ignition-hash=sha512-$SHA512 --network-keyfile /root/ens18.nmconnection

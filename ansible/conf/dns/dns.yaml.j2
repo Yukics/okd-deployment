@@ -1,21 +1,35 @@
 registers:
-{% for item in loadbalancers %}
+{% for item in loadbalancer %}
   - hostname: "{{ item.name }}"
     ip: "{{ item.ip }}"
 {% endfor %}
   - hostname: "bootstrap"
     ip: "{{ bootstrap[0].ip }}"
+  - hostname: "helper"
+    ip: "{{ loadbalancer_ip }}"
   - hostname: "{{ bootstrap[0].name }}"
     ip: "{{ bootstrap[0].ip }}"
   - hostname: "api"
-    ip: "{{ loadbalancer }}"
+    ip: "{{ loadbalancer_ip }}"
   - hostname: "api-int"
-    ip: "{{ loadbalancer }}"
+    ip: "{{ loadbalancer_ip }}"
 {% for item in controlplane %}
   - hostname: "{{ item.name }}"
     ip: "{{ item.ip }}"
 {% endfor %}
 {% for item in compute %}
+  - hostname: "{{ item.name }}"
+    ip: "{{ item.ip }}"
+{% endfor %}
+{% for item in infra %}
+  - hostname: "{{ item.name }}"
+    ip: "{{ item.ip }}"
+{% endfor %}
+{% for item in storage %}
+  - hostname: "{{ item.name }}"
+    ip: "{{ item.ip }}"
+{% endfor %}
+{% for item in monitoring %}
   - hostname: "{{ item.name }}"
     ip: "{{ item.ip }}"
 {% endfor %}

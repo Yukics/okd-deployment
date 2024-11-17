@@ -2,10 +2,12 @@
 log-queries
 log-dhcp
 
-# disable DNS server
+# enable DNS server
+#port=53
+# disable
 port=0
 
-# listen on PXEBOOT vlan (vlan110) only
+# listen on PXEBOOT
 interface=eth0
 
 # enable built-in tftp server
@@ -13,14 +15,14 @@ enable-tftp
 tftp-root=/tftpboot
 
 # DHCP range 10.0.0.200 ~ 10.0.0.250
-dhcp-range=192.168.69.50,192.168.69.150,255.255.255.0,24h
-#dhcp-range=192.168.69.0,proxy
+#dhcp-range=192.168.69.50,192.168.69.150,255.255.255.0,24h
+dhcp-range=192.168.69.0,proxy
 
 # Default gateway
-dhcp-option=3,192.168.69.1
+# dhcp-option=3,192.168.69.1
 
 # Domain name - homelab.net
-dhcp-option=15,yuki.es
+# dhcp-option=15,yuki.es
 
 # Broadcast address
 dhcp-option=28,192.168.69.255
@@ -30,7 +32,7 @@ dhcp-option=28,192.168.69.255
 # dhcp-option=26,9000
 
 # Tag dhcp request from iPXE
-dhcp-match=set:ipxe,175
+# dhcp-match=set:ipxe,175
 
 # inspect the vendor class string and tag BIOS client
 dhcp-vendorclass=BIOS,PXEClient:Arch:00000

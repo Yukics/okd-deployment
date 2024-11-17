@@ -1,3 +1,4 @@
+# Unbound *.apps not working as expected on opnsense
 - name: Generate dns yaml conf
   ansible.builtin.template:
     src: conf/dns.yaml.j2
@@ -16,6 +17,14 @@
     match_fields: ['hostname']
     reload: false
   loop: '{{ list.registers }}'
+
+- name: "Create registers helper.{{ searchdomain }} on unbound DNS"
+  ansibleguy.opnsense.unbound_host:
+    hostname: 'helper'
+    domain: '{{ searchdomain }}'
+    value: '{{ loadbalancer }}'
+    match_fields: ['hostname']
+    reload: false
 
 - name: "Create *.apps.{{ cluster_name }}.{{ searchdomain }} on unbound DNS"
   ansibleguy.opnsense.unbound_domain:

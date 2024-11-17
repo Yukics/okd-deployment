@@ -1,0 +1,31 @@
+- name: Stop infrastructure
+  async: 120
+  poll: 5
+  ignore_errors: true
+  community.general.proxmox_kvm:
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    api_host: "{{ proxmox_api_host }}"
+    api_port: "{{ proxmox_api_port }}"
+    validate_certs: false
+    node: "{{ item.node }}"
+    name: "{{ item.name }}"
+    state: stopped
+    force: true
+    timeout: 90
+
+- name: Remove infrastructure
+  ignore_errors: true
+  async: 120
+  poll: 5
+  community.general.proxmox_kvm:
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    api_host: "{{ proxmox_api_host }}"
+    api_port: "{{ proxmox_api_port }}"
+    validate_certs: false
+    node: "{{ item.node }}"
+    name: "{{ item.name }}"
+    state: absent
+    force: true
+    timeout: 90

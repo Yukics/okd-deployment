@@ -4,7 +4,8 @@ Requires=network.target
 After=syslog.target network.target
 [Service]
 Type=simple
-ExecStart=/bin/python -m http.server -d /root/installation -b 127.0.0.1 8080
+WorkingDirectory=/root/http-ignition
+ExecStart=/root/http-ignition/.venv/bin/python -m uvicorn main:app --host 127.0.0.1 --port 8080
 KillSignal=SIGKILL
 User=root
 [Install]

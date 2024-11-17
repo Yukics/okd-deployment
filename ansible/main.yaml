@@ -1,38 +1,39 @@
 ---
-#? DNS
-# - name: Setup DNS registers opnsense
-#   hosts: localhost
-#   connection: local
-#   gather_facts: no
-#   module_defaults:
-#     group/ansibleguy.opnsense.all:
-#       firewall: '{{ opnsense_host }}'
-#       api_key: '{{ opnsense_key }}'
-#       api_secret: '{{ opnsense_secret }}'
-#       ssl_verify: false
-#     ansibleguy.opnsense.list:
-#       target: 'unbound_host'
-#   vars_files:
-#     - conf/opnsense.yaml
-#     - conf/infra.yaml
-#   tasks:
-#     - include_tasks: tasks/0_opnsense_dns.yaml
+# TODO: install venv and needed utilities
 
-#? LOADBALANCERS VM
+# ? DNS
+- name: Setup DNS registers opnsense
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  module_defaults:
+    group/ansibleguy.opnsense.all:
+      firewall: '{{ opnsense_host }}'
+      api_key: '{{ opnsense_key }}'
+      api_secret: '{{ opnsense_secret }}'
+      ssl_verify: false
+    ansibleguy.opnsense.list:
+      target: 'bind_general'
+  vars_files:
+    - conf/opnsense.yaml
+    - conf/infra.yaml
+  tasks:
+    - include_tasks: tasks/0_opnsense_bind_dns.yaml
+
+# ? LOADBALANCERS VM
 - name: Loadbalancers VM creation
   hosts: localhost
   connection: local
   gather_facts: false
   vars_files:
     - conf/proxmox.yaml
-    - conf/opnsense.yaml
     - conf/infra.yaml
   tasks:
     - name: Create infrastructure
       include_tasks: tasks/1_loadbalancers_create.yaml
 
 - name: Configure keepalived
-  hosts: loadbalancers_hosts
+  hosts: loadbalancer_hosts
   become: true
   vars_files:
     - conf/infra.yaml
@@ -40,64 +41,54 @@
     - include_tasks: tasks/2_loadbalancers_keepalived.yaml
 
 - name: Configure haproxies
-  hosts: loadbalancers_hosts
-  become: true # cloud init default user will be in sudoers
+  hosts: loadbalancer_hosts
+  become: true
   vars_files:
     - conf/infra.yaml
   tasks:
     - include_tasks: tasks/3_loadbalancers_haproxy.yaml
 
-- name: Download and install oc on loadbalancer VM
-  hosts: loadbalancers_hosts
-  become: true # cloud init default user will be in sudoers
+- name: Disable cloud-init service and download/install oc on loadbalancer VM
+  hosts: loadbalancer_hosts
+  become: true
   vars_files:
     - conf/infra.yaml
     - conf/redhat.yaml
   roles:
-  - kwoodson.yedit
+    - kwoodson.yedit
   tasks:
     - include_tasks: tasks/4_loadbalancers_cli.yaml
 
 - name: Configure iPXE
-  hosts: loadbalancers_hosts
+  hosts: loadbalancer_hosts
   become: true
   vars_files:
     - conf/infra.yaml
   tasks:
-    - include_tasks: tasks/4_loadbalancers_ipxe.yaml
+    - include_tasks: tasks/5_loadbalancers_ipxe.yaml
 
-- name: Configuration files preparation
-  hosts: loadbalancers_hosts
-  become: true # cloud init default user will be in sudoers
+- name: Configuration OKD files preparation
+  hosts: loadbalancer_hosts
+  become: true
   vars_files:
     - conf/infra.yaml
     - conf/redhat.yaml
   roles:
   - kwoodson.yedit
   tasks:
-    - include_tasks: tasks/5_okd_conf.yaml
+    - include_tasks: tasks/6_loadbalancers_generate_okd_conf.yaml
 
-#? PROXMOX TEMPLATE
-# - name: Download iso and upload to proxmox
-#   hosts: localhost
-#   connection: local
-#   vars_files:
-#     - conf/infra.yaml
-#     - conf/proxmox.yaml
-#   tasks:
-#     - include_tasks: tasks/6_proxmox_fcos_iso.yaml
+- name: Install fastapi http-ignition
+  hosts: loadbalancer_hosts
+  become: true
+  vars_files:
+    - conf/infra.yaml
+    - conf/redhat.yaml
+  tasks:
+    - include_tasks: tasks/7_loadbalancers_install_http_ignition.yaml
 
-# - name: Fedora Core OS template
-#   hosts: proxmox
-#   gather_facts: false
-#   vars_files:
-#     - conf/infra.yaml
-#     - conf/proxmox.yaml
-#   tasks:
-#     - include_tasks: tasks/7_proxmox_create_fcos_template.yaml
-
-#? BOOTSTRAP CREATION
-- name: Bootstrap VM creation
+#? OKD CREATION
+- name: OKD Bootstrap VM creation
   hosts: localhost
   connection: local
   gather_facts: false
@@ -105,26 +96,79 @@
     - conf/proxmox.yaml
     - conf/infra.yaml
   tasks:
-    - include_tasks: tasks/8_proxmox_create_bootstrap.yaml
+    - include_tasks: tasks/8_proxmox_create_okd_vm.yaml
+      loop: "{{ bootstrap }}"
+      loop_control:
+        label: "{{ item.name }}"
 
-# #? CONTROLPLANE CREATION
-# - name: Controlplane VM creation
-#   hosts: localhost
-#   connection: local
-#   gather_facts: false
-#   vars_files:
-#     - conf/proxmox.yaml
-#     - conf/opnsense.yaml
-#     - conf/infra.yaml
-#   tasks:
-#     - include_tasks: tasks/9_proxmox_create_controlplanes.yaml
+- name: OKD Bootstrap wait until 22623 is exposed
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - conf/infra.yaml
+  tasks:
+    - name: Check port
+      ansible.builtin.wait_for:
+        port: 22623
+        host: '{{ loadbalancer }}'
+        delay: 120
+        timeout: 3600
+      connection: local
 
-# - name: Configure controlplanes
-#   hosts: controlplane_hosts
-#   become: true
-#   vars_files:
-#     - conf/infra.yaml
-#   roles:
-#   - kwoodson.yedit
-#   tasks:
-#     - include_tasks: tasks/controlplane_setup.yaml
+- name: OKD Controlplane VM creation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - conf/proxmox.yaml
+    - conf/infra.yaml
+  tasks:
+    - set_fact:
+        vm_list: "{{ controlplane }}"
+    - include_tasks: tasks/8_proxmox_create_okd_vm.yaml
+      loop: "{{ vm_list }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+- name: Check until bootstrap is finished
+  hosts: loadbalancer_hosts
+  become: true
+  vars_files:
+    - conf/infra.yaml
+  tasks:
+    - include_tasks: tasks/9_okd_wait_bootstrap_finished.yaml
+
+- name: Stop and delete bootstrap VM, no longer needed
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - conf/proxmox.yaml
+    - conf/infra.yaml
+  tasks:
+    - include_tasks: tasks/99_stop_and_destroy_vm.yaml
+      loop: "{{ bootstrap }}"
+
+- name: OKD Workers VM creation
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - conf/proxmox.yaml
+    - conf/infra.yaml
+  tasks:
+    - set_fact:
+        vm_list: "{{ compute + infra + storage + monitoring }}"
+    - include_tasks: tasks/8_proxmox_create_okd_vm.yaml
+      loop: "{{ vm_list }}"
+      loop_control:
+        label: "{{ item.name }}"
+
+- name: OKD initial tasks
+  hosts: loadbalancer_hosts
+  become: true
+  vars_files:
+    - conf/infra.yaml
+  tasks:
+    - include_tasks: tasks/10_okd_initial_tasks.yaml

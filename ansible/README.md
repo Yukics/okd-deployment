@@ -16,9 +16,9 @@
 
 # Launch cluster
 ```bash
-dnf install sshpass # or apt
+dnf install nmap # or apt
 pip install proxmoxer httpx requests_toolbelt jmespath
 ansible-galaxy collection install ansibleguy.opnsense kwoodson.yedit
-export ANSIBLE_HOST_KEY_CHECKING=False
-ansible-playbook -i inventory.ini main.yaml
+# Run playbook
+export ANSIBLE_HOST_KEY_CHECKING=False && ansible-playbook -i inventory.ini main.yaml
 ```

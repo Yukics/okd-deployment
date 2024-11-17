@@ -1,0 +1,14 @@
+- name: Cluster destruction
+  hosts: localhost
+  connection: local
+  gather_facts: false
+  vars_files:
+    - conf/proxmox.yaml
+    - conf/infra.yaml
+  tasks:
+    - set_fact:
+        vm_list: "{{ loadbalancer + bootstrap + controlplane + compute + infra + storage + monitoring }}"
+    - include_tasks: tasks/99_stop_and_destroy_vm.yaml
+      loop: "{{ vm_list }}"
+      loop_control:
+        label: "{{ item.name }}"

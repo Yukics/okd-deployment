@@ -1,113 +1,60 @@
-- name: Create bootstrap VM
-  community.general.proxmox_kvm:
-    api_user: "{{ proxmox_api_user }}"
-    api_password: "{{ proxmox_api_password }}"
-    api_host: "{{ proxmox_api_host }}"
-    api_port: "{{ proxmox_api_port }}"
-    validate_certs: false
-    node: "{{ item.node }}"
-    vmid: "{{ item.id }}"
-    name: "{{ item.name }}"
-    bios: ovmf
-    cores: "{{ item.cores }}"
-    cpu: "host"
-    memory: "{{ item.memory }}"
-    storage: "{{ disk_storage }}"
-    autostart: true
-    onboot: true
-    scsihw: virtio-scsi-single
-    net:
-      net0: 'virtio,bridge=vmbr0'
-    efidisk0:
-      storage: "{{ disk_storage }}"
-      format: raw
-      efitype: 4m
-      pre_enrolled_keys: 0
-    ostype: "l26"
-    state: present
-    timeout: 90
-  loop: "{{ bootstrap }}"
+# - name: "Get count ignition requests {{ item.name }}"
+#   ansible.builtin.shell: echo $(($(curl -s "http://192.168.69.230:8404/stats;csv" | grep ignition-1 | cut -d, -f8)+6))
+#   register: initial_req
+#   args:
+#     executable: /bin/bash
 
-- name: Pause for 1 minutes, wait creation VM
-  ansible.builtin.pause:
-    minutes: 1
+# - name: "Get current requests until it completed an installation cycle {{ item.name }}"
+#   ansible.builtin.shell: curl -s "http://192.168.69.230:8404/stats;csv" | grep ignition-1 | cut -d, -f8
+#   register: current_req
+#   until: 'initial_req.stdout < current_req.stdout'
+#   retries: 280
+#   delay: 1
 
-- name: Add disk to bootstrap VM
-  community.general.proxmox_disk:
-    api_user: "{{ proxmox_api_user }}"
-    api_password: "{{ proxmox_api_password }}"
-    api_host: "{{ proxmox_api_host }}"
-    api_port: "{{ proxmox_api_port }}"
-    validate_certs: false
-    vmid: "{{ item.id }}"
-    disk: scsi0
-    backup: true
-    cache: none
-    storage: "{{ disk_storage }}"
-    size: "{{ item.disk }}"
-    state: present
-  loop: "{{ bootstrap }}"
+# - name: "Stop VM with force {{ item.name }}"
+#   community.general.proxmox_kvm:
+#     api_user: "{{ proxmox_api_user }}"
+#     api_password: "{{ proxmox_api_password }}"
+#     api_host: "{{ proxmox_api_host }}"
+#     api_port: "{{ proxmox_api_port }}"
+#     validate_certs: false
+#     timeout: 1
+#     node: "{{ item.node }}"
+#     vmid: "{{ item.id }}"
+#     name: "{{ item.name }}"
+#     state: stopped
+#     force: true
 
-- name: Update bootstrap VM
-  community.general.proxmox_kvm:
-    api_user: "{{ proxmox_api_user }}"
-    api_password: "{{ proxmox_api_password }}"
-    api_host: "{{ proxmox_api_host }}"
-    api_port: "{{ proxmox_api_port }}"
-    validate_certs: false
-    node: "{{ item.node }}"
-    vmid: "{{ item.id }}"
-    name: "{{ item.name }}"
-    tags:
-      - okd
-      - bootstrap
-    agent: enabled=1
-    timeout: 90
-    update: true
-    boot: "order=net0;scsi0"
-  loop: "{{ bootstrap }}"
+# - name: "Wait for VM to not be running {{ item.name }}"
+#   community.general.proxmox_vm_info:
+#     api_user: "{{ proxmox_api_user }}"
+#     api_password: "{{ proxmox_api_password }}"
+#     api_host: "{{ proxmox_api_host }}"
+#     api_port: "{{ proxmox_api_port }}"
+#     validate_certs: false
+#     type: qemu
+#     vmid: "{{ item.id }}"
+#     config: current
+#   register: vm_status
+#   until: 'vm_status.proxmox_vms[0].status == "stopped"'
+#   retries: 60
+#   delay: 4
 
-- name: Pause for 1 minute, wait VM to create
-  ansible.builtin.pause:
-    minutes: 1
+# - name: "Start VM with force {{ item.name }}"
+#   community.general.proxmox_kvm:
+#     api_user: "{{ proxmox_api_user }}"
+#     api_password: "{{ proxmox_api_password }}"
+#     api_host: "{{ proxmox_api_host }}"
+#     api_port: "{{ proxmox_api_port }}"
+#     validate_certs: false
+#     node: "{{ item.node }}"
+#     vmid: "{{ item.id }}"
+#     name: "{{ item.name }}"
+#     state: started
+#     force: true
 
-- name: Start bootstrap VM
-  community.general.proxmox_kvm:
-    api_user: "{{ proxmox_api_user }}"
-    api_password: "{{ proxmox_api_password }}"
-    api_host: "{{ proxmox_api_host }}"
-    api_port: "{{ proxmox_api_port }}"
-    validate_certs: false
-    node: "{{ item.node }}"
-    name: "{{ item.name }}"
-    state: started
-    timeout: 90
-  loop: "{{ bootstrap }}"
-  async: 60
-  poll: 0
-
-- name: Remove net boot from bootstrap VM
-  community.general.proxmox_kvm:
-    api_user: "{{ proxmox_api_user }}"
-    api_password: "{{ proxmox_api_password }}"
-    api_host: "{{ proxmox_api_host }}"
-    api_port: "{{ proxmox_api_port }}"
-    validate_certs: false
-    node: "{{ item.node }}"
-    vmid: "{{ item.id }}"
-    name: "{{ item.name }}"
-    tags:
-      - okd
-      - bootstrap
-    agent: enabled=1
-    timeout: 90
-    update: true
-    boot: "order=scsi0"
-  loop: "{{ bootstrap }}"
-
-- name: Pause for 1 minute, wait VM to create
-  ansible.builtin.pause:
-    minutes: 1
+# - include_tasks: tasks/8_proxmox_create_bootstrap.yaml
+#   when: "total_created_okd != total_okd"
 
 # - name: Add new hosts to pb execution
 #   add_host: 
@@ -115,7 +62,7 @@
 #     ansible_ssh_host: "{{ item.ip }}" 
 #     groups: bootstrap_hosts
 #     ansible_user: "core"
-#   loop: "{{ bootstrap }}"
+#   loop: "{{ vm_list"total_created_okd
 
 # - name: Pause for 1 minute, wait VM to start
 #   ansible.builtin.pause:

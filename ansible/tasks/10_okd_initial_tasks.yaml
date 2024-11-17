@@ -1,0 +1,55 @@
+- name: Wait for all nodes to join the cluster and be 'Ready'
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    export KUBECONFIG=/root/installation/auth/kubeconfig
+
+    while true; do
+      oc get csr -o go-template='{{range .items}}{{if not .status}}{{.metadata.name}}{{"\n"}}{{end}}{{end}}' | xargs --no-run-if-empty oc adm certificate approve
+      NODE_STATUS=$(oc get nodes | grep "{{ item.name }}" | grep "Ready" | grep -v "Not")
+      if [[ "x$NODE_STATUS" != "x" ]]; then
+        break
+      else
+      sleep 10
+
+    # ../openshift-install wait-for bootstrap-complete
+  loop: "{{ controlplane + compute + infra + storage + monitoring }}"
+
+- name: Configure infra replicas
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    export KUBECONFIG=/root/installation/auth/kubeconfig
+    oc -n openshift-ingress-operator scale ingresscontroller/default --replicas={{ infra|length }}
+
+- name: Label infra nodes
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    export KUBECONFIG=/root/installation/auth/kubeconfig
+    oc label node {{ item.name }} node-role.kubernetes.io/infra=""
+  loop: "{{ infra }}"
+
+- name: Label app nodes
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    export KUBECONFIG=/root/installation/auth/kubeconfig
+    oc label node {{ item.name }} node-role.kubernetes.io/app=""
+  loop: "{{ compute }}"
+
+- name: Label storage nodes
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    export KUBECONFIG=/root/installation/auth/kubeconfig
+    oc label node {{ item.name }} node-role.kubernetes.io/storage=""
+  loop: "{{ compute }}"
+
+- name: Label monitoring nodes
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    export KUBECONFIG=/root/installation/auth/kubeconfig
+    oc label node {{ item.name }} node-role.kubernetes.io/monitoring=""
+  loop: "{{ compute }}"
+
+- name: "Set worker latency profile to {{ cluster_latency_profile }}"
+  when: 'loadbalancers[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    export KUBECONFIG=/root/installation/auth/kubeconfig
+    oc patch --type='merge' nodes.config/cluster  -p '{"spec":{"workerLatencyProfile": "{{ cluster_latency_profile }}"}}'

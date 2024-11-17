@@ -5,13 +5,14 @@
 
 - name: Generate haproxy conf
   ansible.builtin.template:
-    src: conf/haproxy.cfg.j2
+    src: conf/loadbalancer/haproxy.cfg.j2
     dest: /etc/haproxy/haproxy.cfg
     owner: root
     mode: '0660'
     validate: /sbin/haproxy -f %s -c
     backup: yes
 
+#Maybe necessary setsebool -P haproxy_connect_any=1
 - name: Allow haproxy to listen on ports
   community.general.seport:
     ports: 
@@ -19,8 +20,8 @@
       - 443
       - 6443
       - 8000
-      - 22623
       - 8404
+      - 22623
     proto: tcp
     setype: http_port_t
     state: present
@@ -37,8 +38,8 @@
     - 443
     - 6443
     - 8000
-    - 22623
     - 8404
+    - 22623
 
 - name: Restart service haproxy
   ansible.builtin.service:
@@ -48,18 +49,4 @@
 - name: Enable service haproxy
   ansible.builtin.service:
     name: haproxy
-    enabled: yes
-
-- name: Copy ignition-http.service
-  ansible.builtin.copy:
-    src: conf/http-ignition.service
-    dest: /etc/systemd/system
-    owner: root
-    group: root
-    mode: '0644'
-    
-- name: Start http-ignition.service
-  ansible.builtin.systemd_service:
-    state: started
-    name: http-ignition
-    daemon_reload: true
+    enabled: true
