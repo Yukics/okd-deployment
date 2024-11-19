@@ -26,7 +26,11 @@
 
 - name: Create ignition and manifest from previous config
   ansible.builtin.shell: |
-    /root/openshift-install create manifests --dir /root/installation
+    if [[ -f /root/installation/bootstrap.ign ]]; then
+      echo "OK"
+    else
+      /root/openshift-install create manifests --dir /root/installation
+    fi
   when: 'loadbalancer[0].name in inventory_hostname'
 
 - name: Set mastersSchedulable to false
@@ -38,7 +42,11 @@
 
 - name: Create ignition and manifest from previous config
   ansible.builtin.shell: |
-    /root/openshift-install create ignition-configs --dir /root/installation
+    if [[ -f /root/installation/bootstrap.ign ]]; then
+      echo "OK"
+    else
+      /root/openshift-install create ignition-configs --dir /root/installation
+    fi
   when: 'loadbalancer[0].name in inventory_hostname'
 
 - name: Generate butane conf for bootstrap

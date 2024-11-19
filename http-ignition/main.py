@@ -13,6 +13,7 @@ app.mount("/installation", StaticFiles(directory="../installation"), name="insta
 def root(request: Request):
     mac = get_MAC_from_IP(request.client.host)
     vm_name = get_VM_from_MAC(mac)
+    print("INFO: {}: Responding {} configuration ".format(request.client.host, vm_name))
     f = open("../installation/{}.ign".format(vm_name), "r")
     json = f.read()
     return Response(content=json, media_type="application/json")

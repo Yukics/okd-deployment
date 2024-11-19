@@ -27,7 +27,7 @@ storage:
       contents:
         inline: {{ item.name }}.{{ cluster_name }}.{{ searchdomain }}
     - path: /etc/NetworkManager/system-connections/ens18.nmconnection
-      mode: 0600
+      mode: 0400
       contents:
         inline: |
           [connection]

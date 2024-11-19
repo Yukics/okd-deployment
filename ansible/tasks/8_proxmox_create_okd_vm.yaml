@@ -19,6 +19,7 @@
     scsihw: virtio-scsi-single
     tags:
       - okd
+      - "{{ okd_type }}"
     net:
       net0: 'virtio,bridge=vmbr0'
     efidisk0:
@@ -29,12 +30,31 @@
     ostype: "l26"
     state: present
     timeout: 90
+  loop: "{{ okd_vm }}"
+  loop_control:
+    label: "{{ item.name }}"
+  async: 90
+  poll: 0
+  register: vm_creation
 
-- name: "Pause for 30 s, wait creation VM {{ item.name }}"
+- name: Check on OKD VMs creation
+  ignore_errors: true
+  no_log: true
+  async_status:
+    jid: "{{ async_result_item.ansible_job_id }}"
+  register: job_result
+  until: job_result.finished
+  retries: 90
+  delay: 1
+  loop: "{{ vm_creation.results }}"
+  loop_control:
+    loop_var: "async_result_item"
+
+- name: "Pause for 2s, wait creation VMs"
   ansible.builtin.pause:
-    seconds: 30
+    seconds: 2
 
-- name: "Add disks to VM {{ item.name }}"
+- name: "Add SO disks to VM"
   community.general.proxmox_disk:
     api_user: "{{ proxmox_api_user }}"
     api_password: "{{ proxmox_api_password }}"
@@ -42,18 +62,65 @@
     api_port: "{{ proxmox_api_port }}"
     validate_certs: false
     vmid: "{{ item.id }}"
-    disk: "scsi{{ idx }}"
+    disk: "scsi0"
     backup: true
     cache: none
     storage: "{{ proxmox_disk_storage }}"
-    size: "{{ disk }}"
+    size: "{{ item.disk }}"
     state: present
-  loop: "{{ item.disks }}"
-  loop_control:
-    loop_var: disk
-    index_var: idx
+  loop: "{{ okd_vm | json_query('[*].{id: id, disk: @.disks[*]|[0]}') }}"
+  when: 'item.disk is defined'
+  async: 90
+  poll: 0
+  register: vm_disks
 
-- name: "Update netboot VM {{ item.name }}"
+- name: Check on VM disk addition
+  ignore_errors: true
+  no_log: true
+  async_status:
+    jid: "{{ async_result_item.ansible_job_id }}"
+  register: job_result
+  until: job_result.finished
+  retries: 90
+  delay: 1
+  loop: "{{ vm_disks.results }}"
+  loop_control:
+    loop_var: "async_result_item"
+
+- name: "Add extra disk to VM "
+  community.general.proxmox_disk:
+    api_user: "{{ proxmox_api_user }}"
+    api_password: "{{ proxmox_api_password }}"
+    api_host: "{{ proxmox_api_host }}"
+    api_port: "{{ proxmox_api_port }}"
+    validate_certs: false
+    vmid: "{{ item.id }}"
+    disk: "scsi1"
+    backup: true
+    cache: none
+    storage: "{{ proxmox_disk_storage }}"
+    size: "{{ item.disk }}"
+    state: present
+  loop: "{{ okd_vm | json_query('[*].{id: id, disk: @.disks[*]|[1]}') }}"
+  when: 'item.disk is defined'
+  async: 90
+  poll: 0
+  register: vm_disks_extra
+
+- name: Check on VM disk addition
+  ignore_errors: true
+  no_log: true
+  async_status:
+    jid: "{{ async_result_item.ansible_job_id }}"
+  register: job_result
+  until: job_result.finished
+  retries: 90
+  delay: 1
+  loop: "{{ vm_disks_extra.results }}"
+  loop_control:
+    loop_var: "async_result_item"
+
+- name: "Update netboot VM"
   community.general.proxmox_kvm:
     api_user: "{{ proxmox_api_user }}"
     api_password: "{{ proxmox_api_password }}"
@@ -67,8 +134,27 @@
     timeout: 90
     boot: "order=scsi0;net0"
     update: true
+  loop: "{{ okd_vm }}"
+  loop_control:
+    label: "{{ item.name }}"
+  async: 90
+  poll: 0
+  register: vm_boot_order
 
-- name: "Start VM {{ item.name }}"
+- name: Check on OKD VMs boot order
+  ignore_errors: true
+  no_log: true
+  async_status:
+    jid: "{{ async_result_item.ansible_job_id }}"
+  register: job_result
+  until: job_result.finished
+  retries: 90
+  delay: 1
+  loop: "{{ vm_boot_order.results }}"
+  loop_control:
+    loop_var: "async_result_item"
+
+- name: "Start VM"
   community.general.proxmox_kvm:
     api_user: "{{ proxmox_api_user }}"
     api_password: "{{ proxmox_api_password }}"
@@ -79,6 +165,11 @@
     name: "{{ item.name }}"
     state: started
     timeout: 90
+  loop: "{{ okd_vm }}"
+  loop_control:
+    label: "{{ item.name }}"
+  async: 90
+  poll: 0
 
 - name: "Wait for port 22 to become open and contain OpenSSH on {{ item.name }}"
   ansible.builtin.wait_for:
@@ -86,8 +177,11 @@
     host: "{{ item.name }}.{{ cluster_name }}.{{ searchdomain }}"
     search_regex: OpenSSH
     delay: 20
-    timeout: 1200
+    timeout: 24000
   connection: local
+  loop: "{{ okd_vm }}"
+  loop_control:
+    label: "{{ item.name }}"
 
 - name: "Remove net boot from VM {{ item.name }}"
   community.general.proxmox_kvm:
@@ -102,6 +196,8 @@
     timeout: 90
     update: true
     boot: "order=scsi0"
-
-- debug:
-    msg: "Created {{ item.name }}"
+  loop: "{{ okd_vm }}"
+  loop_control:
+    label: "{{ item.name }}"
+  async: 90
+  poll: 0

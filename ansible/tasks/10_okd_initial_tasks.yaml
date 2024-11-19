@@ -1,55 +1,79 @@
 - name: Wait for all nodes to join the cluster and be 'Ready'
-  when: 'loadbalancers[0].name in inventory_hostname'
+  when: 'loadbalancer[0].name in inventory_hostname'
   ansible.builtin.shell: |
     export KUBECONFIG=/root/installation/auth/kubeconfig
-
+    #cd /root/installation
+    #../openshift-install wait-for install-complete
     while true; do
-      oc get csr -o go-template='{{range .items}}{{if not .status}}{{.metadata.name}}{{"\n"}}{{end}}{{end}}' | xargs --no-run-if-empty oc adm certificate approve
-      NODE_STATUS=$(oc get nodes | grep "{{ item.name }}" | grep "Ready" | grep -v "Not")
+      oc get csr -o go-template='{{'{{range .items}}'}}{{'{{if not .status}}'}}{{'{{.metadata.name}}'}}{{'{{"\n"}}'}}{{'{{end}}'}}{{'{{end}}'}}' | xargs --no-run-if-empty oc adm certificate approve > /dev/null
+
+      NODE_STATUS=$(oc get nodes 2> /dev/null | grep "{{ item.name }}" | grep "Ready" | grep -v "Not")
       if [[ "x$NODE_STATUS" != "x" ]]; then
         break
-      else
+      fi
       sleep 10
+    done
 
-    # ../openshift-install wait-for bootstrap-complete
-  loop: "{{ controlplane + compute + infra + storage + monitoring }}"
-
-- name: Configure infra replicas
-  when: 'loadbalancers[0].name in inventory_hostname'
-  ansible.builtin.shell: |
-    export KUBECONFIG=/root/installation/auth/kubeconfig
-    oc -n openshift-ingress-operator scale ingresscontroller/default --replicas={{ infra|length }}
+    echo "OK"
+  vars:
+    total_hosts: "{{ controlplane + compute + infra + storage + monitoring }}"
+  register: check_readiness
+  until: '"OK" in check_readiness.stdout'
+  retries: 720
+  delay: 10
 
 - name: Label infra nodes
-  when: 'loadbalancers[0].name in inventory_hostname'
+  when: 'loadbalancer[0].name in inventory_hostname'
   ansible.builtin.shell: |
     export KUBECONFIG=/root/installation/auth/kubeconfig
     oc label node {{ item.name }} node-role.kubernetes.io/infra=""
   loop: "{{ infra }}"
 
 - name: Label app nodes
-  when: 'loadbalancers[0].name in inventory_hostname'
+  when: 'loadbalancer[0].name in inventory_hostname'
   ansible.builtin.shell: |
     export KUBECONFIG=/root/installation/auth/kubeconfig
     oc label node {{ item.name }} node-role.kubernetes.io/app=""
   loop: "{{ compute }}"
 
 - name: Label storage nodes
-  when: 'loadbalancers[0].name in inventory_hostname'
+  when: 'loadbalancer[0].name in inventory_hostname'
   ansible.builtin.shell: |
     export KUBECONFIG=/root/installation/auth/kubeconfig
     oc label node {{ item.name }} node-role.kubernetes.io/storage=""
   loop: "{{ compute }}"
 
 - name: Label monitoring nodes
-  when: 'loadbalancers[0].name in inventory_hostname'
+  when: 'loadbalancer[0].name in inventory_hostname'
   ansible.builtin.shell: |
     export KUBECONFIG=/root/installation/auth/kubeconfig
     oc label node {{ item.name }} node-role.kubernetes.io/monitoring=""
   loop: "{{ compute }}"
 
 - name: "Set worker latency profile to {{ cluster_latency_profile }}"
-  when: 'loadbalancers[0].name in inventory_hostname'
+  when: 'loadbalancer[0].name in inventory_hostname'
   ansible.builtin.shell: |
     export KUBECONFIG=/root/installation/auth/kubeconfig
     oc patch --type='merge' nodes.config/cluster  -p '{"spec":{"workerLatencyProfile": "{{ cluster_latency_profile }}"}}'
+
+- name: Configure infra replicas and schedule
+  when: 'loadbalancer[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    export KUBECONFIG=/root/installation/auth/kubeconfig
+    oc -n openshift-ingress-operator scale ingresscontroller/default --replicas={{ infra|length }}
+    oc patch -n openshift-ingress-operator --type='merge' ingresscontroller/default -p '{"spec":{"nodePlacement":{"nodeSelector":{"matchLabels":{"node-role.kubernetes.io/infra":""}},"tolerations":[{"effect":"NoSchedule","key":"node-role.kubernetes.io/infra","value":"reserved"},{"effect":"NoExecute","key":"node-role.kubernetes.io/infra","value":"reserved"}]}}}'
+
+- name: Copy monitoring schedule configmap
+  when: 'loadbalancer[0].name in inventory_hostname'
+  ansible.builtin.copy:
+    src: ./conf/okd/monitoring-selector.yaml
+    dest: /root/installation
+    owner: root
+    group: root
+    mode: '0644'
+
+- name: Configure monitoring schedule
+  when: 'loadbalancer[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    export KUBECONFIG=/root/installation/auth/kubeconfig
+    oc -n openshift-monitoring appy -f /root/installation/monitoring-selector.yaml

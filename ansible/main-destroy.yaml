@@ -9,6 +9,5 @@
     - set_fact:
         vm_list: "{{ loadbalancer + bootstrap + controlplane + compute + infra + storage + monitoring }}"
     - include_tasks: tasks/99_stop_and_destroy_vm.yaml
-      loop: "{{ vm_list }}"
-      loop_control:
-        label: "{{ item.name }}"
+      vars:
+        okd_vm: "{{ vm_list }}"

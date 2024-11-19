@@ -1,4 +1,8 @@
 ansible/conf/redhat.yaml
 ansible/conf/opnsense.yaml
-ansible/conf/dns.yaml
+ansible/conf/dns/dns.yaml
 ansible/conf/proxmox.yaml
+.vscode/
+http-ignition/.venv
+http-ignition/__pycache__
+http-ignition/lib/__pycache__

@@ -1,7 +1,14 @@
 ---
-# TODO: - name: Get this hosts ssh public keys
+- name: Get this hosts ssh public keys
+  ansible.builtin.shell: |
+    cat ~/.ssh/*.pub
+  register: my_sshkeys
 
-- name: Create loadbalancer VM
+- name: Add my ssh keys to fact
+  ansible.builtin.set_fact:
+    my_sshkeys: my_sshkeys.stdout
+
+- name: Async create loadbalancer VMs
   community.general.proxmox_kvm:
     api_user: "{{ proxmox_api_user }}"
     api_password: "{{ proxmox_api_password }}"
@@ -19,12 +26,26 @@
   loop: "{{ loadbalancer }}"
   loop_control:
     label: "{{ item.name }}"
-  async: 100
-  poll: 5
+  async: 90
+  poll: 0
+  register: vm_creation
 
-- name: "Pause for 5s, wait for VM creation"
+- name: Check VM creation
+  ignore_errors: true
+  no_log: true
+  async_status:
+    jid: "{{ async_result_item.ansible_job_id }}"
+  register: job_result
+  until: job_result.finished
+  retries: 90
+  delay: 4
+  loop: "{{ vm_creation.results }}"
+  loop_control:
+    loop_var: "async_result_item"
+
+- name: "Pause for 2s, wait for VM creation"
   ansible.builtin.pause:
-    seconds: 5
+    seconds: 2
 
 - name: Configure cloned VM
   community.general.proxmox_kvm:
@@ -53,9 +74,9 @@
   loop_control:
     label: "{{ item.name }}"
 
-- name: "Pause for 5s, wait for configuration to get applied"
+- name: "Pause for 2s, wait for configuration to get applied"
   ansible.builtin.pause:
-    seconds: 5
+    seconds: 2
 
 - name: Update cloned VM with Cloud-init
   community.general.proxmox_kvm:
@@ -81,9 +102,9 @@
   loop_control:
     label: "{{ item.name }}"
 
-- name: "Pause for 5s, wait for cloud-init to get applied"
+- name: "Pause for 2s, wait for cloud-init to get applied"
   ansible.builtin.pause:
-    seconds: 5
+    seconds: 2
 
 - name: Start loadbalancer VM
   community.general.proxmox_kvm:
@@ -98,16 +119,8 @@
   loop: "{{ loadbalancer }}"
   loop_control:
     label: "{{ item.name }}"
-
-- name: Add new hosts to pb execution
-  add_host: 
-    name: "{{ item.name }}.{{ cluster_name }}.{{ searchdomain }}" 
-    ansible_ssh_host: "{{ item.ip }}" 
-    groups: loadbalancer_hosts
-    ansible_user: "{{ item.user }}"
-  loop: "{{ loadbalancer }}"
-  loop_control:
-    label: "{{ item.name }}"
+  async: 120
+  poll: 0
 
 - name: Wait for port 22 to become open and contain "OpenSSH"
   ansible.builtin.wait_for:
@@ -131,5 +144,15 @@
     disk: 'ide2'
     state: absent
   loop: '{{ loadbalancer }}'
+  loop_control:
+    label: "{{ item.name }}"
+
+- name: Add new hosts to pb execution
+  add_host: 
+    name: "{{ item.name }}.{{ cluster_name }}.{{ searchdomain }}" 
+    ansible_ssh_host: "{{ item.ip }}" 
+    groups: loadbalancer_hosts
+    ansible_user: "{{ item.user }}"
+  loop: "{{ loadbalancer }}"
   loop_control:
     label: "{{ item.name }}"

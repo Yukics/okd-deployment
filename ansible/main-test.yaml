@@ -1,0 +1,13 @@
+- name: Pruebas
+  hosts: localhost
+  connection: local
+  gather_facts: no
+  vars_files:
+    - conf/opnsense.yaml
+    - conf/infra.yaml
+  tasks:
+    - set_fact:
+        vm_list: "{{ compute + infra + storage + monitoring }}"
+    - debug:
+        # msg: "{{ vm_list  }}"
+        msg: "{{ vm_list | json_query('[*].{id: id, node: node, disk: @.disks[*]|[1]}') }}"

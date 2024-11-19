@@ -21,3 +21,14 @@ platform:
   none: {} 
 pullSecret: '{{ redhat_pull_secret }}'
 sshKey: '{{ ssh_public_key['content'] | b64decode | trim }}' 
+capabilities:
+  baselineCapabilitySet: vCurrent
+  additionalEnabledCapabilities:
+  - Build 
+  - CSISnapshot
+  - Console
+  - ImageRegistry
+  - Storage
+  - marketplace
+  - NodeTuning
+  - OperatorLifecycleManager 

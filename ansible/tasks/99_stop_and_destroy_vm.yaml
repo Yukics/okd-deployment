@@ -1,6 +1,4 @@
-- name: Stop infrastructure
-  async: 120
-  poll: 5
+- name: "Async stop infrastructure VM"
   ignore_errors: true
   community.general.proxmox_kvm:
     api_user: "{{ proxmox_api_user }}"
@@ -12,9 +10,28 @@
     name: "{{ item.name }}"
     state: stopped
     force: true
-    timeout: 90
+    timeout: 10
+  loop: "{{ okd_vm }}"
+  loop_control:
+    label: "{{ item.name }}"
+  async: 90
+  poll: 0
+  register: vm_stop
 
-- name: Remove infrastructure
+- name: "Check VMs stop"
+  ignore_errors: true
+  async_status:
+    jid: "{{ async_result_item.ansible_job_id }}"
+  register: job_result
+  until: job_result.finished
+  retries: 90
+  delay: 1
+  no_log: true
+  loop: "{{ vm_stop.results }}"
+  loop_control:
+    loop_var: "async_result_item"
+
+- name: "Remove infrastructure"
   ignore_errors: true
   async: 120
   poll: 5
@@ -29,3 +46,8 @@
     state: absent
     force: true
     timeout: 90
+  loop: "{{ okd_vm }}"
+  loop_control:
+    label: "{{ item.name }}"
+  async: 90
+  poll: 0

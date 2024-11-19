@@ -2,23 +2,23 @@
 # TODO: install venv and needed utilities
 
 # ? DNS
-- name: Setup DNS registers opnsense
-  hosts: localhost
-  connection: local
-  gather_facts: no
-  module_defaults:
-    group/ansibleguy.opnsense.all:
-      firewall: '{{ opnsense_host }}'
-      api_key: '{{ opnsense_key }}'
-      api_secret: '{{ opnsense_secret }}'
-      ssl_verify: false
-    ansibleguy.opnsense.list:
-      target: 'bind_general'
-  vars_files:
-    - conf/opnsense.yaml
-    - conf/infra.yaml
-  tasks:
-    - include_tasks: tasks/0_opnsense_bind_dns.yaml
+# - name: Setup DNS registers opnsense
+#   hosts: localhost
+#   connection: local
+#   gather_facts: no
+#   module_defaults:
+#     group/ansibleguy.opnsense.all:
+#       firewall: '{{ opnsense_host }}'
+#       api_key: '{{ opnsense_key }}'
+#       api_secret: '{{ opnsense_secret }}'
+#       ssl_verify: false
+#     ansibleguy.opnsense.list:
+#       target: 'bind_general'
+#   vars_files:
+#     - conf/opnsense.yaml
+#     - conf/infra.yaml
+#   tasks:
+#     - include_tasks: tasks/0_opnsense_bind_dns.yaml
 
 # ? LOADBALANCERS VM
 - name: Loadbalancers VM creation
@@ -39,6 +39,15 @@
     - conf/infra.yaml
   tasks:
     - include_tasks: tasks/2_loadbalancers_keepalived.yaml
+
+- name: Install fastapi http-ignition
+  hosts: loadbalancer_hosts
+  become: true
+  vars_files:
+    - conf/infra.yaml
+    - conf/redhat.yaml
+  tasks:
+    - include_tasks: tasks/7_loadbalancers_install_http_ignition.yaml
 
 - name: Configure haproxies
   hosts: loadbalancer_hosts
@@ -78,15 +87,6 @@
   tasks:
     - include_tasks: tasks/6_loadbalancers_generate_okd_conf.yaml
 
-- name: Install fastapi http-ignition
-  hosts: loadbalancer_hosts
-  become: true
-  vars_files:
-    - conf/infra.yaml
-    - conf/redhat.yaml
-  tasks:
-    - include_tasks: tasks/7_loadbalancers_install_http_ignition.yaml
-
 #? OKD CREATION
 - name: OKD Bootstrap VM creation
   hosts: localhost
@@ -97,24 +97,37 @@
     - conf/infra.yaml
   tasks:
     - include_tasks: tasks/8_proxmox_create_okd_vm.yaml
-      loop: "{{ bootstrap }}"
-      loop_control:
-        label: "{{ item.name }}"
+      vars:
+        okd_type: "bootstrap"
+        okd_vm: "{{ bootstrap }}"
 
-- name: OKD Bootstrap wait until 22623 is exposed
+- name: OKD Bootstrap wait until 22623 and 6443 are exposed
   hosts: localhost
   connection: local
   gather_facts: false
   vars_files:
     - conf/infra.yaml
   tasks:
-    - name: Check port
-      ansible.builtin.wait_for:
-        port: 22623
-        host: '{{ loadbalancer }}'
-        delay: 120
-        timeout: 3600
-      connection: local
+    - name: Check bootstrap config/master
+      ignore_errors: true
+      ansible.builtin.uri:
+        validate_certs: false
+        method: GET
+        url: "https://{{ loadbalancer_ip }}:22623/config/master"
+      register: check_ignition
+      until: 'check_ignition.status == 200'
+      retries: 120
+      delay: 30
+    - name: Check api server is working
+      ignore_errors: true
+      ansible.builtin.uri:
+        validate_certs: false
+        method: GET
+        url: "https://{{ loadbalancer_ip }}:6443/readyz"
+      register: check_ignition
+      until: 'check_ignition.status == 200'
+      retries: 120
+      delay: 30
 
 - name: OKD Controlplane VM creation
   hosts: localhost
@@ -127,9 +140,9 @@
     - set_fact:
         vm_list: "{{ controlplane }}"
     - include_tasks: tasks/8_proxmox_create_okd_vm.yaml
-      loop: "{{ vm_list }}"
-      loop_control:
-        label: "{{ item.name }}"
+      vars:
+        okd_type: "controlplane"
+        okd_vm: "{{ bootstrap }}"
 
 - name: Check until bootstrap is finished
   hosts: loadbalancer_hosts
@@ -161,9 +174,12 @@
     - set_fact:
         vm_list: "{{ compute + infra + storage + monitoring }}"
     - include_tasks: tasks/8_proxmox_create_okd_vm.yaml
-      loop: "{{ vm_list }}"
-      loop_control:
-        label: "{{ item.name }}"
+      vars:
+        okd_type: "worker"
+        okd_vm: "{{ vm_list }}"
+      # loop: "{{ vm_list }}"
+      # loop_control:
+      #   label: "{{ item.name }}"
 
 - name: OKD initial tasks
   hosts: loadbalancer_hosts

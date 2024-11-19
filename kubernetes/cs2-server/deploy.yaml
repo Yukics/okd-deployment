@@ -1,0 +1,190 @@
+kind: Deployment
+apiVersion: apps/v1
+metadata:
+  name: cs2-deploy
+  namespace: cs2
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: cs2-deploy
+  template:
+    metadata:
+      labels:
+        app: cs2-deploy
+    spec:
+      restartPolicy: Always
+      serviceAccountName: sa-with-anyuid
+      schedulerName: default-scheduler
+      terminationGracePeriodSeconds: 30
+      securityContext:
+        seLinuxOptions:
+          level: 's0:c27,c4'
+        supplementalGroups:
+          - 1000
+        fsGroup: 1000
+      containers:
+        - resources: {}
+          terminationMessagePath: /dev/termination-log
+          name: container
+          env:
+            - name: SRCDS_TOKEN
+              value: CHANGEME
+            - name: CS2_SERVERNAME
+              value: RIU TORNEO
+            - name: CS2_CHEATS
+              value: '0'
+            - name: CS2_SERVER_HIBERNATE
+              value: '1'
+            - name: CS2_IP
+              value: 0.0.0.0
+            - name: CS2_PORT
+              value: '27015'
+            - name: CS2_RCON_PORT
+              value: '27015'
+            - name: CS2_LAN
+              value: '0'
+            - name: CS2_RCONPW
+              value: CHANGEME
+            - name: CS2_PW
+              value: CHANGEME
+            - name: CS2_MAXPLAYERS
+              value: '10'
+            - name: CS2_GAMEALIAS
+              value: competitive
+            - name: CS2_GAMETYPE
+              value: '0'
+            - name: CS2_GAMEMODE
+              value: '1'
+            - name: CS2_MAPGROUP
+              value: mg_active
+            - name: CS2_STARTMAP
+              value: de_inferno
+            - name: CS2_BOT_DIFFICULTY
+              value: '0'
+            - name: CS2_BOT_QUOTA_MODE
+              value: fill
+            - name: CS2_BOT_QUOTA
+              value: '0'
+            - name: TV_ENABLE
+              value: '0'
+            - name: TV_PORT
+              value: '27020'
+            - name: TV_AUTORECORD
+              value: '1'
+            - name: TV_PW
+              value: calueslamejor
+            - name: TV_MAXRATE
+              value: '1024'
+            - name: TV_DELAY
+              value: '5'
+            - name: CS2_LOG
+              value: 'on'
+            - name: CS2_LOG_MONEY
+              value: '1'
+            - name: CS2_LOG_DETAIL
+              value: '3'
+            - name: CS2_LOG_ITEMS
+              value: '1'
+            - name: STEAMAPPVALIDATE
+              value: '0'
+            - name: HOME
+              value: /home/steam
+            - name: TZ
+              value: Europe/Madrid
+          securityContext:
+            runAsUser: 1000
+          ports:
+            - containerPort: 27015
+              protocol: UDP
+            - containerPort: 27020
+              protocol: UDP
+            - containerPort: 27015
+              protocol: TCP
+            - containerPort: 27020
+              protocol: TCP
+          imagePullPolicy: Always
+          volumeMounts:
+            - name: cs2-server
+              mountPath: /home/steam/cs2-dedicated
+          terminationMessagePolicy: File
+          image: 'docker.io/joedwards32/cs2:latest'
+      serviceAccount: sa-with-anyuid
+      volumes:
+        - name: cs2-server
+          persistentVolumeClaim:
+            claimName: cs2-server
+      dnsPolicy: ClusterFirst
+  strategy:
+    type: Recreate
+  revisionHistoryLimit: 10
+  progressDeadlineSeconds: 600
+---
+kind: ServiceAccount
+apiVersion: v1
+metadata:
+  name: sa-with-anyuid
+  namespace: cs2
+---
+kind: ClusterRoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: 'system:openshift:scc:anyuid'
+subjects:
+  - kind: ServiceAccount
+    name: sa-with-anyuid
+    namespace: cs2
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: 'system:openshift:scc:anyuid'
+---
+kind: PersistentVolumeClaim
+apiVersion: v1
+metadata:
+  name: cs2-server
+  namespace: cs2
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 100Gi
+  storageClassName: rook-cephfs
+  volumeMode: Filesystem
+---
+kind: Service
+apiVersion: v1
+metadata:
+  name: cs2-service
+  namespace: cs2
+spec:
+  externalIPs:
+    - 192.168.69.235 # set node IP
+  externalTrafficPolicy: Cluster
+  ipFamilies:
+    - IPv4
+  ports:
+    - name: port-1
+      protocol: UDP
+      port: 27015
+      targetPort: 27015
+      nodePort: 30983
+    - name: port-2
+      protocol: TCP
+      port: 27015
+      targetPort: 27015
+      nodePort: 30983
+    - name: port-3
+      protocol: UDP
+      port: 27020
+      targetPort: 27020
+    - name: port-4
+      protocol: TCP
+      port: 27020
+      targetPort: 27020
+      nodePort: 32158
+  type: NodePort
+  selector:
+    app: cs2-deploy
+

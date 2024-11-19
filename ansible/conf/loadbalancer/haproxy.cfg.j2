@@ -62,6 +62,7 @@ listen api-server-6443
   bind *:6443
   mode tcp
   option  httpchk GET /readyz HTTP/1.0
+  http-check expect string ok
   option  log-health-checks
   balance roundrobin
   server bootstrap bootstrap.{{ cluster_name }}.{{ searchdomain }}:6443 verify none check check-ssl inter 10s fall 2 rise 3 backup resolvers mydns

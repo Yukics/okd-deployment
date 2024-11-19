@@ -1,0 +1,19 @@
+kind: Route
+apiVersion: route.openshift.io/v1
+metadata:
+  name: rook-dashboard
+  namespace: rook-ceph
+  labels:
+    app: rook-ceph-mgr
+    rook_cluster: rook-ceph
+spec:
+  host: ceph.apps.okd.yuki.es
+  to:
+    kind: Service
+    name: rook-ceph-mgr-dashboard
+    weight: 100
+  port:
+    targetPort: http-dashboard
+  tls:
+    termination: edge
+  wildcardPolicy: None
