@@ -9,15 +9,15 @@ kernel_arguments:
     - 'crashkernel=300M'
 storage:
   files:
-    - path: /etc/zincati/config.d/55-updates-strategy.toml
-      contents:
-        inline: |
-          [updates]
-          strategy = "periodic"
-          [[updates.periodic.window]]
-          days = [ "Sun" ]
-          start_time = "22:30"
-          length_minutes = 60
+#    - path: /etc/zincati/config.d/55-updates-strategy.toml
+#      contents:
+#        inline: |
+#          [updates]
+#          strategy = "periodic"
+#          [[updates.periodic.window]]
+#          days = [ "Sun" ]
+#          start_time = "22:30"
+#          length_minutes = 60
     - path: /etc/vconsole.conf
       mode: 0644
       contents:
@@ -49,7 +49,7 @@ passwd:
 {% for item in sshkeys %}
         - {{ item }}
 {% endfor %}        
-systemd:
-  units:
-  - name: kdump.service
-    enabled: true
+#systemd:
+#  units:
+#  - name: kdump.service
+#    enabled: true

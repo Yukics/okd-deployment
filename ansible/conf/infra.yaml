@@ -60,7 +60,7 @@ controlplane:
     memory: 16384
     disks: 
       - 100
-    node: "platon"
+    node: "socrates"
   - name: "parmenides-03"
     id: 303
     ip: 192.168.69.233
@@ -129,7 +129,7 @@ storage:
     disks: 
       - 100
       - 500
-    node: "platon"
+    node: "socrates"
   - name: "anaximenes-03"
     id: 311
     ip: 192.168.69.241

@@ -7,7 +7,7 @@ metadata:
     app: rook-ceph-mgr
     rook_cluster: rook-ceph
 spec:
-  host: ceph.apps.okd.yuki.es
+  host: ceph.apps.{{ cluster_name }}.{{ searchdomain }}
   to:
     kind: Service
     name: rook-ceph-mgr-dashboard

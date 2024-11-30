@@ -21,15 +21,14 @@
 - name: "Check VMs stop"
   ignore_errors: true
   async_status:
-    jid: "{{ async_result_item.ansible_job_id }}"
+    jid: "{{ item.ansible_job_id }}"
   register: job_result
   until: job_result.finished
   retries: 90
   delay: 1
   no_log: true
   loop: "{{ vm_stop.results }}"
-  loop_control:
-    loop_var: "async_result_item"
+
 
 - name: "Remove infrastructure"
   ignore_errors: true

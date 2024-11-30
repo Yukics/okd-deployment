@@ -1,4 +1,4 @@
-- name: "Create VM {{ item.name }}"
+- name: "Create VM"
   community.general.proxmox_kvm:
     api_user: "{{ proxmox_api_user }}"
     api_password: "{{ proxmox_api_password }}"
@@ -33,11 +33,12 @@
   loop: "{{ okd_vm }}"
   loop_control:
     label: "{{ item.name }}"
+    pause: 1
   async: 90
   poll: 0
   register: vm_creation
 
-- name: Check on OKD VMs creation
+- name: "Check on OKD VMs creation"
   ignore_errors: true
   no_log: true
   async_status:
@@ -69,14 +70,17 @@
     size: "{{ item.disk }}"
     state: present
   loop: "{{ okd_vm | json_query('[*].{id: id, disk: @.disks[*]|[0]}') }}"
+  loop_control:
+    pause: 1
   when: 'item.disk is defined'
   async: 90
   poll: 0
   register: vm_disks
 
-- name: Check on VM disk addition
+- name: "Check on VM disk addition"
   ignore_errors: true
   no_log: true
+  failed_when: false
   async_status:
     jid: "{{ async_result_item.ansible_job_id }}"
   register: job_result
@@ -102,14 +106,16 @@
     size: "{{ item.disk }}"
     state: present
   loop: "{{ okd_vm | json_query('[*].{id: id, disk: @.disks[*]|[1]}') }}"
-  when: 'item.disk is defined'
+  loop_control:
+    pause: 1
+  when: 'item.disk != ""'
   async: 90
   poll: 0
   register: vm_disks_extra
 
-- name: Check on VM disk addition
+- name: "Check on VM extra disk addition"
+  failed_when: false
   ignore_errors: true
-  no_log: true
   async_status:
     jid: "{{ async_result_item.ansible_job_id }}"
   register: job_result
@@ -141,7 +147,7 @@
   poll: 0
   register: vm_boot_order
 
-- name: Check on OKD VMs boot order
+- name: "Check on OKD VMs boot order"
   ignore_errors: true
   no_log: true
   async_status:
@@ -171,7 +177,7 @@
   async: 90
   poll: 0
 
-- name: "Wait for port 22 to become open and contain OpenSSH on {{ item.name }}"
+- name: "Wait for port 22 to become open and contain OpenSSH"
   ansible.builtin.wait_for:
     port: 22
     host: "{{ item.name }}.{{ cluster_name }}.{{ searchdomain }}"
@@ -183,7 +189,7 @@
   loop_control:
     label: "{{ item.name }}"
 
-- name: "Remove net boot from VM {{ item.name }}"
+- name: "Remove net boot from VM"
   community.general.proxmox_kvm:
     api_user: "{{ proxmox_api_user }}"
     api_password: "{{ proxmox_api_password }}"

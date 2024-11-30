@@ -2,20 +2,21 @@
   when: 'loadbalancer[0].name in inventory_hostname'
   ansible.builtin.shell: |
     cd /root/installation
-    ../openshift-install wait-for bootstrap-complete 2>&1
+    sh -c "../openshift-install wait-for bootstrap-complete 2>&1" 
   register: wait_finish
   retries: 240
   delay: 30
   until: '"safe to remove the bootstrap resources" in wait_finish.stdout'
 
 - name: Check api server is working
+  when: 'loadbalancer[0].name in inventory_hostname'
   ignore_errors: true
   ansible.builtin.uri:
     validate_certs: false
     method: GET
     url: "https://{{ item.ip }}:6443/readyz"
   register: check_ignition
-  until: 'check_ignition.content == "ok"'
+  until: '"OK" in check_ignition.msg'
   retries: 120
   delay: 30
   loop: "{{ controlplane }}"

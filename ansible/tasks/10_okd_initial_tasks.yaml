@@ -15,40 +15,44 @@
     done
 
     echo "OK"
-  vars:
-    total_hosts: "{{ controlplane + compute + infra + storage + monitoring }}"
+  loop: "{{ controlplane + compute + infra + storage + monitoring }}"
   register: check_readiness
   until: '"OK" in check_readiness.stdout'
   retries: 720
   delay: 10
 
 - name: Label infra nodes
+  ignore_errors: true
   when: 'loadbalancer[0].name in inventory_hostname'
   ansible.builtin.shell: |
     export KUBECONFIG=/root/installation/auth/kubeconfig
-    oc label node {{ item.name }} node-role.kubernetes.io/infra=""
+    oc label --overwrite=true node {{ item.name }}.{{ cluster_name }}.{{ searchdomain }} node-role.kubernetes.io/infra=""
+    oc adm taint nodes {{ item.name }}.{{ cluster_name }}.{{ searchdomain }} node-role.kubernetes.io/infra:NoSchedule
   loop: "{{ infra }}"
 
 - name: Label app nodes
+  ignore_errors: true
   when: 'loadbalancer[0].name in inventory_hostname'
   ansible.builtin.shell: |
     export KUBECONFIG=/root/installation/auth/kubeconfig
-    oc label node {{ item.name }} node-role.kubernetes.io/app=""
+    oc label --overwrite=true node {{ item.name }}.{{ cluster_name }}.{{ searchdomain }} node-role.kubernetes.io/app=""
   loop: "{{ compute }}"
 
 - name: Label storage nodes
+  ignore_errors: true
   when: 'loadbalancer[0].name in inventory_hostname'
   ansible.builtin.shell: |
     export KUBECONFIG=/root/installation/auth/kubeconfig
-    oc label node {{ item.name }} node-role.kubernetes.io/storage=""
-  loop: "{{ compute }}"
+    oc label --overwrite=true node {{ item.name }}.{{ cluster_name }}.{{ searchdomain }} node-role.kubernetes.io/storage=""
+  loop: "{{ storage }}"
 
 - name: Label monitoring nodes
+  ignore_errors: true
   when: 'loadbalancer[0].name in inventory_hostname'
   ansible.builtin.shell: |
     export KUBECONFIG=/root/installation/auth/kubeconfig
-    oc label node {{ item.name }} node-role.kubernetes.io/monitoring=""
-  loop: "{{ compute }}"
+    oc label --overwrite=true node {{ item.name }}.{{ cluster_name }}.{{ searchdomain }} node-role.kubernetes.io/monitoring=""
+  loop: "{{ monitoring }}"
 
 - name: "Set worker latency profile to {{ cluster_latency_profile }}"
   when: 'loadbalancer[0].name in inventory_hostname'
@@ -66,7 +70,7 @@
 - name: Copy monitoring schedule configmap
   when: 'loadbalancer[0].name in inventory_hostname'
   ansible.builtin.copy:
-    src: ./conf/okd/monitoring-selector.yaml
+    src: ../kubernetes/cluster/monitoring-selector.yaml
     dest: /root/installation
     owner: root
     group: root
@@ -76,4 +80,17 @@
   when: 'loadbalancer[0].name in inventory_hostname'
   ansible.builtin.shell: |
     export KUBECONFIG=/root/installation/auth/kubeconfig
-    oc -n openshift-monitoring appy -f /root/installation/monitoring-selector.yaml
+    oc -n openshift-monitoring apply -f /root/installation/monitoring-selector.yaml
+
+- name: Get kubeadmin password
+  when: 'loadbalancer[0].name in inventory_hostname'
+  ansible.builtin.shell: |
+    cat /root/installation/auth/kubeadmin-password
+  register: kubeadmin_password
+
+- debug:
+    msg: 
+      - "Console: https://console-openshift-console.{{ cluster_name }}.{{searchdomain}}"  
+      - "User: kubeadmin"
+      - "Password: {{ kubeadmin_password.stdout }}"
+  when: 'loadbalancer[0].name in inventory_hostname'

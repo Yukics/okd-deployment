@@ -1,22 +1,25 @@
 apiVersion: v1
 baseDomain: {{ searchdomain }}
-compute: 
-- hyperthreading: Enabled 
-  name: worker
-  replicas: 0 
-controlPlane: 
-  hyperthreading: Enabled 
-  name: master
-  replicas: 3 
 metadata:
   name: {{ cluster_name }} 
 networking:
   clusterNetwork:
-  - cidr: 10.128.0.0/14 
+  - cidr: 10.128.0.0/14
     hostPrefix: 23 
-  networkType: OVNKubernetes 
+  networkType: OVNKubernetes # or OpenShiftSDN
+#  machineNetwork:
+#  - cidr: {{ haproxy_acl_network }}
   serviceNetwork: 
   - 172.30.0.0/16
+compute: 
+- hyperthreading: Enabled 
+  name: worker
+  replicas: 0
+#  replicas: {{ (compute + infra + storage + monitoring) | length }}
+controlPlane: 
+  hyperthreading: Enabled 
+  name: master
+  replicas: {{ controlplane | length }}  
 platform:
   none: {} 
 pullSecret: '{{ redhat_pull_secret }}'

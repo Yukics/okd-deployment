@@ -1,3 +1,4 @@
+apiVersion: ceph.rook.io/v1
 kind: CephCluster
 metadata:
   name: rook-ceph
@@ -118,15 +119,11 @@ spec:
     allowDeviceClassUpdate: false # whether to allow changing the device class of an OSD after it is created
     allowOsdCrushWeightUpdate: false # whether to allow resizing the OSD crush weight after osd pvc is increased
     nodes:
-    - name: "anaximenes-01.okd.yuki.es"
+{% for item in storage %}
+    - name: "{{ item.name }}.{{ cluster_name }}.{{ searchdomain }}"
       devices:
        - name: "sdb"
-    - name: "anaximenes-02.okd.yuki.es"
-      devices:
-      - name: "sdb"
-    - name: "anaximenes-03.okd.yuki.es"
-      devices:
-      - name: "sdb"
+{% endfor %}
     scheduleAlways: false
     onlyApplyOSDPlacement: false
     flappingRestartIntervalHours: 24

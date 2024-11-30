@@ -40,15 +40,6 @@
   tasks:
     - include_tasks: tasks/2_loadbalancers_keepalived.yaml
 
-- name: Install fastapi http-ignition
-  hosts: loadbalancer_hosts
-  become: true
-  vars_files:
-    - conf/infra.yaml
-    - conf/redhat.yaml
-  tasks:
-    - include_tasks: tasks/7_loadbalancers_install_http_ignition.yaml
-
 - name: Configure haproxies
   hosts: loadbalancer_hosts
   become: true
@@ -87,19 +78,45 @@
   tasks:
     - include_tasks: tasks/6_loadbalancers_generate_okd_conf.yaml
 
-#? OKD CREATION
-- name: OKD Bootstrap VM creation
-  hosts: localhost
-  connection: local
-  gather_facts: false
+- name: Install fastapi http-ignition
+  hosts: loadbalancer_hosts
+  become: true
   vars_files:
-    - conf/proxmox.yaml
     - conf/infra.yaml
+    - conf/redhat.yaml
   tasks:
-    - include_tasks: tasks/8_proxmox_create_okd_vm.yaml
-      vars:
-        okd_type: "bootstrap"
-        okd_vm: "{{ bootstrap }}"
+    - include_tasks: tasks/7_loadbalancers_install_http_ignition.yaml
+
+#? OKD CREATION
+# - name: OKD Bootstrap VM creation
+#   hosts: localhost
+#   connection: local
+#   gather_facts: false
+#   vars_files:
+#     - conf/proxmox.yaml
+#     - conf/infra.yaml
+#   tasks:
+#     - include_tasks: tasks/8_proxmox_create_okd_vm.yaml
+#       vars:
+#         okd_type: "bootstrap"
+#         okd_vm: "{{ bootstrap }}"
+
+# - name: OKD wait for bootstrap to complete
+#   hosts: loadbalancer_hosts
+#   become: true
+#   vars_files:
+#     - conf/infra.yaml
+#     - conf/redhat.yaml
+#   tasks:
+#     - name: Wait for bootstrap to complete
+#       when: 'loadbalancer[0].name in inventory_hostname'
+#       ansible.builtin.shell: |
+#         cd /root/installation
+#         while true; do
+#           ../openshift-install wait-for bootstrap-complete | grep 'Bootstrap Complete'
+#           # expect errors, timeout, keep going sometimes
+#           [ $? -eq 0 ] && break
+#         done
 
 - name: OKD Bootstrap wait until 22623 and 6443 are exposed
   hosts: localhost
@@ -137,12 +154,10 @@
     - conf/proxmox.yaml
     - conf/infra.yaml
   tasks:
-    - set_fact:
-        vm_list: "{{ controlplane }}"
     - include_tasks: tasks/8_proxmox_create_okd_vm.yaml
       vars:
         okd_type: "controlplane"
-        okd_vm: "{{ bootstrap }}"
+        okd_vm: "{{ controlplane }}"
 
 - name: Check until bootstrap is finished
   hosts: loadbalancer_hosts
@@ -161,7 +176,8 @@
     - conf/infra.yaml
   tasks:
     - include_tasks: tasks/99_stop_and_destroy_vm.yaml
-      loop: "{{ bootstrap }}"
+      vars:
+        okd_vm: "{{ bootstrap }}"
 
 - name: OKD Workers VM creation
   hosts: localhost
@@ -177,9 +193,6 @@
       vars:
         okd_type: "worker"
         okd_vm: "{{ vm_list }}"
-      # loop: "{{ vm_list }}"
-      # loop_control:
-      #   label: "{{ item.name }}"
 
 - name: OKD initial tasks
   hosts: loadbalancer_hosts
@@ -188,3 +201,11 @@
     - conf/infra.yaml
   tasks:
     - include_tasks: tasks/10_okd_initial_tasks.yaml
+
+- name: OKD sertup rook-ceph
+  hosts: loadbalancer_hosts
+  become: true
+  vars_files:
+    - conf/infra.yaml
+  tasks:
+    - include_tasks: tasks/11_okd_setup_data_foundations.yaml
