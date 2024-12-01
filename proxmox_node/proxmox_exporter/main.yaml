@@ -1,0 +1,61 @@
+---
+- name: Setup proxmox pve exporter
+  hosts: proxmox
+  vars:
+    pve_user: "pve-exporter"
+  vars_prompt:
+    - name: pve_exporter_password
+      prompt: "Enter {{ pve_user }} password"
+      private: true
+
+  tasks:
+    - name: Install pip
+      ansible.builtin.apt:
+        name: 
+          - python3-pip
+          - python3-venv
+        state: present
+
+    - name: Install pve-exporter from pip
+      ansible.builtin.pip:
+        name: prometheus-pve-exporter
+        virtualenv: /opt/prometheus-pve-exporter
+
+    - name: Copy service file
+      ansible.builtin.copy:
+        src: conf/pve-exporter.service
+        dest: /etc/systemd/system/pve-exporter.service
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Creates directory
+      ansible.builtin.file:
+        path: /etc/prometheus
+        state: directory
+
+    - name: Copy conf file
+      ansible.builtin.template:
+        src: conf/pve.yaml.j2
+        dest: /etc/prometheus/pve.yaml
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Create service user
+      ansible.builtin.shell: |
+        useradd -s /bin/false pve-exporter
+
+    - name: Create proxmox user and add permission 
+      run_once: true
+      ansible.builtin.shell: |
+        pveum useradd {{ pve_user }}@pve -comment "PVE exporter user" -password "{{ pve_exporter_password }}"
+        pveum acl modify / -user {{ pve_user }}@pve -role PVEAuditor
+
+    - name: Start and enable service
+      ansible.builtin.systemd_service:
+        name: pve-exporter.service
+        state: started
+        daemon_reload: true
+        enabled: yes
+

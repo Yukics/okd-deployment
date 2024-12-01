@@ -3,26 +3,36 @@
   ansible.builtin.shell: |
     mkdir -p /root/installation/rook-ceph
 
-- name: Copy rook-ceph yaml
+- name: Copy rook-ceph yaml jinja
   when: 'loadbalancer[0].name in inventory_hostname'
   ansible.builtin.template:
+    src: ../kubernetes/rook-ceph/{{ item }}
+    dest: /root/installation/rook-ceph/{{ item }}
+  loop:
+    - cluster.yaml
+    - route.yaml
+
+- name: Copy rook-ceph yaml
+  when: 'loadbalancer[0].name in inventory_hostname'
+  ansible.builtin.copy:
     src: ../kubernetes/rook-ceph/{{ item }}
     dest: /root/installation/rook-ceph/{{ item }}
   loop:
     - crds.yaml
     - common.yaml
     - operator-openshift.yaml
-    - cluster.yaml
     - rbac.yaml
     - exporter-service-monitor.yaml
     - localrules.yaml
 
 - name: Create ceph cluster
   when: 'loadbalancer[0].name in inventory_hostname'
+  ignore_errors: true
   ansible.builtin.shell: |
     export KUBECONFIG=/root/installation/auth/kubeconfig
     cd /root/installation/rook-ceph
-    oc create -f crds.yaml -f common.yaml
-    oc create -f operator-openshift.yaml
-    oc create -f cluster.yaml
-    oc create -f rbac.yaml -f exporter-service-monitor.yaml -f localrules.yaml
+    oc apply -f crds.yaml 
+    oc apply -f common.yaml 
+    oc apply -f operator-openshift.yaml
+    oc apply -f cluster.yaml
+    oc apply -f rbac.yaml -f exporter-service-monitor.yaml -f localrules.yaml -f route.yaml
